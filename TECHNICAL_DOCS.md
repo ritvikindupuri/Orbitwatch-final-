@@ -1,5 +1,7 @@
 
-# OrbitWatch: Technical Reference Manual
+# OrbitWatch: Technical Documentation
+by: Ritvik Indupuri
+Date: 11/19/2025
 
 ## 1. Executive Summary
 

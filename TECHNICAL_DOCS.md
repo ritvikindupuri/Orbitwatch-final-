@@ -174,6 +174,39 @@ The deep-dive view containing:
 
 ---
 
-## 7. Conclusion & Future Roadmap
+## 7. Operational Lifecycle Walkthrough
+
+This section traces the exact flow of data from user input to visual alert.
+
+1.  **Initialization:**
+    *   User enters credentials in `SpaceTrackLogin`.
+    *   `satelliteData.ts` fetches ~20-500 TLE records (LEO/GEO mix).
+    *   **Result:** A `RealSatellite[]` array is stored in React State.
+
+2.  **Training (The "Loading" Screen):**
+    *   `App.tsx` triggers `trainModelOnCatalog`.
+    *   `tensorFlowService.ts` extracts 6 features from every satellite.
+    *   Stats (Mean/StdDev) are calculated.
+    *   The Autoencoder trains for 30 epochs on this specific data.
+    *   **Result:** A trained `tf.Sequential` model exists in browser memory.
+
+3.  **Steady State:**
+    *   User sees the 3D Globe (`MapDisplay`).
+    *   Every 60ms, `MapDisplay` calculates new X/Y/Z positions for all dots.
+
+4.  **Anomaly Detection Event:**
+    *   Every 7 seconds, the `App.tsx` loop picks a random satellite.
+    *   It calls `model.predict(satellite)`.
+    *   The model calculates a Reconstruction Error (MSE).
+    *   **Result:** If MSE is high, a new `AnomalyAlert` is added to the state.
+
+5.  **User Response:**
+    *   The map renders a **Red Pulsating Ring** around the satellite.
+    *   User clicks the ring.
+    *   `AnomalyDetailView` opens, showing the ML Risk Score and Vectors.
+
+---
+
+## 8. Conclusion & Future Roadmap
 
 OrbitWatch demonstrates that advanced SDA capabilities can be delivered via the browser without compromising on physical accuracy or algorithmic depth. By moving the ML and Physics logic to the client, we enable scalable, secure, and high-performance monitoring suitable for modern space operations centers.

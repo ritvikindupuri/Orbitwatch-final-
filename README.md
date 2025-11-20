@@ -11,6 +11,21 @@ For a deep dive into the mathematics and engineering, please read the [Technical
 
 ---
 
+## 🛠 Technology Stack
+
+OrbitWatch utilizes a modern, "Thick Client" stack to deliver high-performance physics and AI without server-side latency.
+
+| Component | Technology | Purpose |
+| :--- | :--- | :--- |
+| **Frontend Core** | **React 19 (Vite)** | Component lifecycle, State management, HMR. |
+| **Machine Learning** | **TensorFlow.js** | Runs the Deep Autoencoder model on the GPU via WebGL. |
+| **Orbital Physics** | **Satellite.js** | SGP4/SDP4 propagation algorithms for real-time tracking. |
+| **Visualization** | **React-Globe.gl** | High-performance 3D rendering wrapper for Three.js. |
+| **Styling** | **Tailwind CSS** | Utility-first styling for the mission-control aesthetic. |
+| **Data Source** | **Space-Track.org** | Real-world TLE (Two-Line Element) catalog data. |
+
+---
+
 ## 🏗 System Architecture
 
 OrbitWatch has migrated from a traditional Client-Server model to a **Thick Client** architecture. This ensures zero latency in orbital propagation and protects data privacy by running machine learning inference directly within the user's browser sandbox.
@@ -18,7 +33,11 @@ OrbitWatch has migrated from a traditional Client-Server model to a **Thick Clie
 ### Architectural Overview
 The diagram below illustrates the complete component interaction model. Note how the **Browser Runtime** encapsulates the entire logic stack—including the Physics Engine (SGP4) and the AI Inference Engine (TensorFlow.js)—isolating it from external network dependencies after the initial data fetch.
 
-![System Architecture](https://i.imgur.com/cu6xW8n.png)
+<p align="center">
+  <img src="https://i.imgur.com/cu6xW8n.png" alt="System Architecture" width="800" />
+  <br>
+  <b>Figure 1: High-Level System Architecture & Client-Side Sandbox Boundary</b>
+</p>
 
 ---
 
@@ -79,7 +98,7 @@ To ensure the model is production-grade and robust against overfitting:
 
 ### `services/satelliteData.ts` (The Data Layer)
 *   **CORS Handling:** Browsers block direct calls to Space-Track. This service attempts a direct connection but implements a robust **Fallback Strategy**. If the API blocks the request, it seamlessly loads a curated snapshot of real TLE data (Starlink, GPS, NOAA, etc.) to ensure the app remains functional for demonstrations.
-*   **Parsing:** Converts the cryptic 3-line text format of TLEs into structured JSON objects.
+*   **Parsing:** Converts the 3-line text format of TLEs into structured JSON objects.
 *   **Attribution:** Regex-based parsing of satellite names to determine Country of Origin (e.g., `COSMOS` -> CIS, `BEIDOU` -> PRC).
 
 ### `components/AnomalyDetailView.tsx` (The Inspector)
@@ -95,7 +114,11 @@ The application prioritizes real data but is built to be resilient against brows
 ### Logic Flowchart
 The diagram below details the ingestion lifecycle. It visualizes the path from User Credentials to Space-Track Authentication. Crucially, it depicts the **CORS Fallback Mechanism**, where the system intelligently switches to a cached real-world snapshot if browser security policies block the direct API connection. This ensures that the TensorFlow model *always* receives valid physics data for training, regardless of network conditions.
 
-![Data Flow](https://i.imgur.com/ceADblA.png)
+<p align="center">
+  <img src="https://i.imgur.com/ceADblA.png" alt="Data Flow" width="800" />
+  <br>
+  <b>Figure 2: Ingestion Logic & CORS Fallback Mechanism</b>
+</p>
 
 ---
 

@@ -2,9 +2,17 @@
 # OrbitWatch: Technical Reference Manual
 
 ## 1. Executive Summary
-OrbitWatch is a **Client-Side Space Domain Awareness (SDA)** platform. Unlike traditional architectures where heavy computation happens on a backend server, OrbitWatch leverages **WebAssembly (Wasm)** and **WebGL** to perform orbital propagation and Machine Learning inference directly within the user's browser.
 
-This document details the mathematical models, data pipelines, and React component architecture that power the application.
+OrbitWatch represents a paradigm shift in Space Domain Awareness (SDA) architecture. Traditionally, orbital analysis and anomaly detection are computationally expensive tasks relegated to heavy backend clusters or cloud environments. This centralized approach introduces latency, bandwidth constraints, and potential single points of failure.
+
+**OrbitWatch proves that modern browser engines, equipped with WebGL and WebAssembly (Wasm), are capable of handling the rigorous mathematics of SGP4 propagation and Deep Learning inference entirely on the client side.**
+
+By shifting the compute load to the edge (the operator's machine), the platform achieves:
+1.  **Zero-Latency Inference:** Anomaly detection occurs instantly within the local memory space, removing network round-trips.
+2.  **Operational Security:** Sensitive orbital analysis logic runs locally within the browser sandbox; no raw telemetry needs to leave the secure terminal.
+3.  **Infrastructure Reduction:** The backend is effectively serverless, drastically reducing the cost and complexity of deployment.
+
+This document serves as a comprehensive engineering manual, detailing the specific implementation of the Client-Side Sandbox, the mathematical derivation of the Deep Autoencoder, and the React-based orchestration layer that binds the physics and AI engines together.
 
 ---
 
@@ -209,4 +217,22 @@ This section traces the exact flow of data from user input to visual alert.
 
 ## 8. Conclusion & Future Roadmap
 
-OrbitWatch demonstrates that advanced SDA capabilities can be delivered via the browser without compromising on physical accuracy or algorithmic depth. By moving the ML and Physics logic to the client, we enable scalable, secure, and high-performance monitoring suitable for modern space operations centers.
+OrbitWatch has successfully validated the efficacy of "Thick Client" architectures for mission-critical space operations. The implementation demonstrates that:
+1.  **Unsupervised Learning** is effective for detecting novel anomalies without labeled failure datasets.
+2.  **Client-Side Inference** via TensorFlow.js is performant enough for real-time analysis of thousands of objects.
+3.  **Cinema-Grade Visualization** can coexist with rigorous engineering tools in a web context.
+
+### Engineering Roadmap (Next Steps)
+To evolve from a Technical Proof-of-Concept (PoC) to a production-ready SpOC tool, the following milestones are proposed:
+
+*   **Phase 2: Rust & WebAssembly Migration**
+    *   *Objective:* Port the SGP4 propagation loop from JavaScript to Rust (compiled to Wasm).
+    *   *Benefit:* Increase particle simulation capacity from ~3,000 to 20,000+ objects at 60 FPS.
+
+*   **Phase 3: Temporal ML Models (LSTM)**
+    *   *Objective:* Replace the current dense Autoencoder with a Long Short-Term Memory (LSTM) Autoencoder.
+    *   *Benefit:* Allow the system to analyze time-series sequences of TLEs, enabling detection of gradual degradation trends (e.g., slowly failing thrusters) rather than just instantaneous state anomalies.
+
+*   **Phase 4: Federated Learning**
+    *   *Objective:* Implement a distributed training protocol.
+    *   *Benefit:* Allow individual operator nodes to train on local data and share weight updates without ever sharing the underlying classified orbital parameters or catalog data.

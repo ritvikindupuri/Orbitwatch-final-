@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { AnomalyAlert } from '../types';
 import { getRiskColor, getRiskHoverColor } from '../constants';
 import { RiskDistributionChart } from './RiskDistributionChart';
@@ -87,7 +87,8 @@ export const DashboardPanel: React.FC<DashboardPanelProps> = ({
     isSystemReady,
 }) => {
     
-    const [searchQuery, setSearchQuery] = useState('');
+    const [inputValue, setInputValue] = useState(''); // Immediate input state
+    const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(''); // Delayed state for filtering
     const [countryFilter, setCountryFilter] = useState<string>('all');
     const [typeFilter, setTypeFilter] = useState<string>('all');
 
@@ -95,12 +96,20 @@ export const DashboardPanel: React.FC<DashboardPanelProps> = ({
         return alerts.find(s => s.satellite.NORAD_CAT_ID === selectedSatelliteId) || null;
     }, [selectedSatelliteId, alerts]);
 
+    // Debounce Effect: Wait 300ms after user stops typing to update the filter logic
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearchQuery(inputValue);
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [inputValue]);
+
     // Optimized Filtering
     const filteredAlerts = useMemo(() => {
         if (!isSystemReady) return [];
         
         // Lowercase once for efficiency
-        const query = searchQuery.toLowerCase().trim();
+        const query = debouncedSearchQuery.toLowerCase().trim();
         
         return alerts.filter(alert => {
             // 1. Search Filter
@@ -120,7 +129,7 @@ export const DashboardPanel: React.FC<DashboardPanelProps> = ({
 
             return matchesSearch && matchesCountry && matchesType;
         });
-    }, [alerts, searchQuery, countryFilter, typeFilter, isSystemReady]);
+    }, [alerts, debouncedSearchQuery, countryFilter, typeFilter, isSystemReady]);
     
     if (selectedAlert) {
         return (
@@ -161,14 +170,19 @@ export const DashboardPanel: React.FC<DashboardPanelProps> = ({
                      <FilterControl label="Country of Origin" value={countryFilter} onChange={setCountryFilter} options={filterOptions.countries} disabled={!isSystemReady} />
                      <FilterControl label="Object Type" value={typeFilter} onChange={setTypeFilter} options={filterOptions.types} disabled={!isSystemReady} />
                  </div>
-                 <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder={isSystemReady ? "Search name, NORAD ID, risk..." : "System initializing..."}
-                    disabled={!isSystemReady}
-                    className="w-full p-2 bg-gray-800 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:bg-gray-800/50 disabled:placeholder:text-gray-600"
-                />
+                 <div className="relative">
+                    <input
+                        type="text"
+                        value={inputValue}
+                        onChange={(e) => setInputValue(e.target.value)}
+                        placeholder={isSystemReady ? "Search name, NORAD ID, risk..." : "System initializing..."}
+                        disabled={!isSystemReady}
+                        className="w-full p-2 pl-8 bg-gray-800 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:bg-gray-800/50 disabled:placeholder:text-gray-600"
+                    />
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 absolute left-2.5 top-3 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                 </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-2">
@@ -191,7 +205,7 @@ export const DashboardPanel: React.FC<DashboardPanelProps> = ({
                         <p className="text-sm">AI is analyzing telemetry streams.</p>
                     </div>
                 )}
-                {searchQuery && filteredAlerts.length === 0 && isSystemReady && (
+                {debouncedSearchQuery && filteredAlerts.length === 0 && isSystemReady && (
                      <div className="flex items-center justify-center h-full text-gray-500 text-center">
                         <p>No matching alerts found for your search.</p>
                     </div>

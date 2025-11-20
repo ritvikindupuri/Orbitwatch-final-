@@ -131,7 +131,7 @@ export default function MapDisplay({ satelliteCatalog, alerts, selectedSatellite
                 alt: p.alt,
                 // Ensure the ring color matches the Risk Level
                 color: getRiskHexColor(p.risk || 'Critical'),
-                maxRadius: 15, // Size of the ripple in degrees
+                maxRadius: 8, // Reduced size for cleaner ripple look
                 propagationSpeed: 2, 
                 repeatPeriod: 1000 
             }));

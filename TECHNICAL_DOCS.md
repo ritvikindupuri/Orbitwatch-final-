@@ -1,7 +1,5 @@
 
-# OrbitWatch: Technical Documentation
-by: Ritvik Indupuri
-Date: 11/19/2025
+# OrbitWatch: Technical Reference Manual
 
 ## 1. Executive Summary
 
@@ -129,7 +127,7 @@ To ensure the system provides high-fidelity station-keeping analysis, we employ 
     Since the model is an Autoencoder (Unsupervised Learning), it does not need millions of labeled examples. It simply needs enough examples of "normal" GEO physics to learn the mathematical curve of a stable orbit.
 
 2.  **GEO Specialization:**
-    The ingestion pipeline is configured to fetch only objects in the Geostationary Belt (Mean Motion 0.99--1.01). By training the Autoencoder specifically on this regime, we effectively "over-fit" the model to the physics of perfectly stationary satellites. This makes the system **hyper-sensitive** to anomalies: even minute drift or unannounced inclination maneuvers will cause the reconstruction error to spike, flagging the object immediately.
+    The ingestion pipeline is configured to fetch **only** objects in the Geostationary Belt (Mean Motion 0.99--1.01), typically limiting the training set to the top **100** assets. By training the Autoencoder specifically on this regime, we effectively "over-fit" the model to the physics of perfectly stationary satellites. This makes the system **hyper-sensitive** to anomalies: even minute drift or unannounced inclination maneuvers will cause the reconstruction error to spike, flagging the object immediately.
 
 3.  **The Information Bottleneck:**
     As visualized in Figure 3, the 3-neuron bottleneck (50% compression) mathematically forces the model to discard noise. It acts as a structural regularizer.
@@ -157,7 +155,7 @@ The app attempts to connect to `https://www.space-track.org/ajaxauth/login`.
 
 ### 4.2 The CORS Fallback Mechanism
 **Problem:** Space-Track.org does not set `Access-Control-Allow-Origin` headers for localhost requests.
-**Solution:** The service catches the `Failed to fetch` error. If detected, it automatically loads `FALLBACK_TLE_SNAPSHOT`—a hardcoded constant containing real TLE strings for **8 curated satellites** (GOES-13, INTELSAT 901, GALAXY 15, etc.). This ensures the app is always demonstrable and the ML model always has real physics data to train on, even without a proxy server.
+**Solution:** The service catches the `Failed to fetch` error. If detected, it automatically loads `FALLBACK_TLE_SNAPSHOT`—a hardcoded constant containing real TLE strings for **8 curated GEO satellites** (GOES-13, INTELSAT 901, GALAXY 15, etc.). This ensures the app is always demonstrable and the ML model always has real physics data to train on, even without a proxy server.
 
 ### 4.3 Data Accuracy & Freshness
 The application operates on strict, real-world orbital elements.
@@ -252,6 +250,48 @@ This section traces the exact flow of data from user input to visual alert.
 
 ## 8. Conclusion & Future Roadmap
 
-In conclusion, OrbitWatch has clearly shown that a thick client approach can meet the demands of mission‑critical space operations. The system proves that unsupervised learning can detect anomalies without relying on labeled datasets, that client‑side inference with TensorFlow.js is fast enough to process thousands of objects in real time, and that high‑quality visualization can work seamlessly alongside engineering tools in a browser environment. These results confirm that advanced analysis and clear visualization can operate together within a client‑side framework, providing a reliable foundation for future mission platforms that need both technical accuracy and ease of use.
+OrbitWatch has successfully validated the efficacy of "Thick Client" architectures for mission-critical space operations. The implementation demonstrates that:
+1.  **Unsupervised Learning** is effective for detecting novel anomalies without labeled failure datasets.
+2.  **Client-Side Inference** via TensorFlow.js is performant enough for real-time analysis of thousands of objects.
+3.  **Cinema-Grade Visualization** can coexist with rigorous engineering tools in a web context.
+
+### Engineering Roadmap (Next Steps)
+To evolve from a Technical Proof-of-Concept (PoC) to a production-ready SpOC tool, the following milestones are proposed:
+
+*   **Phase 2: Rust & WebAssembly Migration**
+    *   *Objective:* Port the SGP4 propagation loop from JavaScript to Rust (compiled to Wasm).
+    *   *Benefit:* Increase particle simulation capacity from ~3,000 to 20,000+ objects at 60 FPS.
+
+*   **Phase 3: Temporal ML Models (LSTM)**
+    *   *Objective:* Replace the current dense Autoencoder with a Long Short-Term Memory (LSTM) Autoencoder.
+    *   *Benefit:* Allow the system to analyze time-series sequences of TLEs, enabling detection of gradual degradation trends (e.g., slowly failing thrusters) rather than just instantaneous state anomalies.
+
+*   **Phase 4: Federated Learning**
+    *   *Objective:* Implement a distributed training protocol.
+    *   *Benefit:* Allow individual operator nodes to train on local data and share weight updates without ever sharing the underlying classified orbital parameters or catalog data.
 
 ---
+
+## 9. Database Architecture (Supabase/PostgreSQL)
+
+While the current OrbitWatch implementation is stateless (Architecture V1), production deployments require persistence. The recommended database solution is **Supabase (PostgreSQL)** due to its native handling of Time-Series data and Real-Time subscriptions.
+
+### 9.1 Schema Design
+The data model is designed to support the transition from Spatial (Snapshot) analysis to Temporal (Historical) analysis.
+
+*   **`satellites` Table:**
+    *   Acts as the "Asset Inventory."
+    *   Stores NORAD ID, Name, Launch Date, and Owner.
+*   **`orbital_data` Table (Time-Series):**
+    *   **Purpose:** This is the most critical table for Phase 3 (LSTM).
+    *   **Function:** Instead of overwriting the TLE when it updates, we append a new row with a `timestamp`.
+    *   **ML Usage:** The LSTM model will query this table: `SELECT * FROM orbital_data WHERE satellite_id = 12345 ORDER BY epoch ASC`.
+*   **`anomalies` Table:**
+    *   Persists the ML Risk Scores generated by the Client-Side engine.
+    *   Enables historical reporting on threat trends.
+
+### 9.2 Real-Time Sync Strategy
+Supabase provides a `Realtime` engine over WebSockets.
+*   **Workflow:** When Operator A annotates an anomaly in `AnomalyDetailView`, the app inserts a row into `operator_notes`.
+*   **Propagation:** Supabase pushes this new row to all connected clients.
+*   **Result:** Operator B's dashboard updates instantly, enabling collaborative Mission Control capabilities without complex WebSocket backend code.

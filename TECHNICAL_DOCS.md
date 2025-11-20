@@ -38,17 +38,22 @@ The application follows a linear state initialization followed by a cyclic analy
 
 The core of the anomaly detection system is a **Deep Autoencoder**. An Autoencoder is a type of Neural Network trained to copy its input to its output. By restricting the network's capacity (creating a "bottleneck"), we force it to learn the most significant patterns in the data.
 
-### 3.1 Feature Engineering
-We extract **6 Orbital Elements** from the Two-Line Element (TLE) sets to serve as the input vector for the model.
+### 3.1 Feature Engineering (The 6 Keplerian Elements)
+We do not train on arbitrary metadata like names or IDs. We extract the **6 Classical Orbital Elements (COEs)** directly from the Space-Track TLE data. These variables fundamentally define the shape, size, and orientation of an orbit in 3D space.
 
-| Feature Index | Name | Unit | Purpose |
+The raw TLE string is parsed by the SGP4 library (`satellite.twoline2satrec`) to extract the following floating-point values, which form the input vector for the Neural Network:
+
+| Feature Index | SGP4 Variable | Description | Physical Significance |
 | :--- | :--- | :--- | :--- |
-| 0 | **Inclination** | Radians | Defines orbital tilt relative to the equator. |
-| 1 | **Eccentricity** | Unitless | Defines deviation from a perfect circle. |
-| 2 | **Mean Motion** | Rad/Min | Defines orbital speed. **Critical** for distinguishing LEO vs GEO. |
-| 3 | **RAAN** | Radians | Right Ascension of the Ascending Node. |
-| 4 | **Arg of Perigee** | Radians | Orientation of the orbit within the orbital plane. |
-| 5 | **Mean Anomaly** | Radians | Satellite's position along the ellipse at epoch. |
+| 0 | **`inclo`** (Inclination) | Orbit tilt relative to equator (Radians). | Distinguishes Polar/Sun-Synchronous orbits (high rads) from Equatorial orbits (low rads). |
+| 1 | **`ecco`** (Eccentricity) | Shape deviation from circle (0.0 to 1.0). | Critical for detecting maneuvers. A circular orbit becoming elliptical suggests a $\Delta V$ event. |
+| 2 | **`no`** (Mean Motion) | Revs/Day (Radians/Min). | **The Primary Differentiator.** Defines altitude. LEO satellites orbit fast (~15.0), GEO satellites orbit slow (~1.0). |
+| 3 | **`nodeo`** (RAAN) | Right Ascension of Ascending Node (Radians). | Defines the longitudinal orientation of the orbital plane. |
+| 4 | **`argpo`** (Arg of Perigee) | Argument of Perigee (Radians). | Defines the orientation of the ellipse within the orbital plane. |
+| 5 | **`mo`** (Mean Anomaly) | Position along orbit (Radians). | Defines where the satellite is *right now* along the path. |
+
+**Why these specific 6?**
+These parameters are mathematically sufficient to reconstruct any conic orbit. If the Autoencoder learns the correlations between these 6 numbers (e.g., specific Inclinations usually correlate with specific Mean Motions for Sun-Synchronous orbits), it effectively "understands" orbital mechanics.
 
 ### 3.2 Data Normalization (Z-Score Standardization)
 Neural networks cannot handle raw orbital data effectively because the scales differ wildly (e.g., Eccentricity is 0.0001, while Mean Motion might be 15.0).
@@ -71,7 +76,7 @@ The model utilizes a symmetrical "hourglass" topology designed to compress orbit
 **Node Breakdown:**
 
 1.  **Input Layer (6 Nodes):**
-    *   Receives the normalized Z-Scores of the 6 orbital elements (Inc, Ecc, MM, RAAN, ArgP, MA).
+    *   Receives the normalized Z-Scores of the 6 Keplerian elements.
     *   Acts as the interface between the SGP4 physics engine and the Neural Network.
 
 2.  **Encoder Layer (12 Nodes - Activation: Tanh):**

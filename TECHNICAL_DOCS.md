@@ -125,14 +125,23 @@ The Risk Score is **not simulated**. It is a direct result of a mathematical ope
 ### 3.6 Prevention of Overfitting & GEO Specialization
 To ensure the system provides high-fidelity station-keeping analysis, we employ a **GEO-Centric** training strategy.
 
-1.  **GEO Specialization:**
-    The ingestion pipeline is configured to exclusively fetch objects in the Geostationary Belt (Mean Motion ~1.0). By training the Autoencoder specifically on this regime, the model becomes highly sensitive to "Drift" and "Station-Keeping" anomalies. If a satellite deviates even slightly from the strict physics of the GEO belt (e.g., an unannounced inclination maneuver), the Reconstruction Error spikes significantly.
+1.  **Small Dataset Sufficiency:**
+    Since the model is an Autoencoder (Unsupervised Learning), it does not need millions of labeled examples. It simply needs enough examples of "normal" GEO physics to learn the mathematical curve of a stable orbit.
 
-2.  **The Information Bottleneck:**
+2.  **GEO Specialization:**
+    The ingestion pipeline is configured to fetch only objects in the Geostationary Belt (Mean Motion 0.99--1.01). By training the Autoencoder specifically on this regime, we effectively "over-fit" the model to the physics of perfectly stationary satellites. This makes the system **hyper-sensitive** to anomalies: even minute drift or unannounced inclination maneuvers will cause the reconstruction error to spike, flagging the object immediately.
+
+3.  **The Information Bottleneck:**
     As visualized in Figure 3, the 3-neuron bottleneck (50% compression) mathematically forces the model to discard noise. It acts as a structural regularizer.
 
-3.  **Strict Epoch Limiting:**
+4.  **Strict Epoch Limiting:**
     We train for exactly **30 Epochs**. In experimentation, convergence typically happens around epoch 20. Training for 1000+ epochs would allow the weights to adjust to the specific floating-point quirks of the Space-Track TLE snapshot.
+
+### 3.7 Spatial vs. Temporal Analysis Strategy
+A common question is whether a snapshot of 100 satellites is sufficient compared to a historical database.
+
+*   **Spatial Analysis (Current):** The current Autoencoder performs **Population-Based Anomaly Detection**. It compares a satellite against its peers in the current moment. This is highly effective for detecting immediate physics violations, regime outliers, and station-keeping errors relative to the "Fleet Norm". A snapshot of 60-100 objects provides a statistically significant population to define this manifold.
+*   **Temporal Analysis (Future):** To detect gradual degradation (e.g., component fatigue over 6 months), **Time-Series** data is required. This necessitates a backend database and LSTM (Long Short-Term Memory) models, which is outlined in **Phase 3** of the roadmap.
 
 ---
 
@@ -142,11 +151,13 @@ To ensure the system provides high-fidelity station-keeping analysis, we employ 
 The app attempts to connect to `https://www.space-track.org/ajaxauth/login`.
 *   **Method:** POST
 *   **Payload:** `identity` (username), `password`.
-*   **Query:** We execute a specific query to `basicspacedata/query` to fetch the GEO catalog.
+*   **Query Logic (Live Mode):** We execute a specific query to `basicspacedata/query` strictly limited to **100 Satellites**.
+    *   *Filter:* `MEAN_MOTION` between 0.99 and 1.01 (Geosynchronous).
+    *   *Reasoning:* Training on this specific subset ensures the model learns the ideal "Station-Keeping" physics manifold.
 
 ### 4.2 The CORS Fallback Mechanism
 **Problem:** Space-Track.org does not set `Access-Control-Allow-Origin` headers for localhost requests.
-**Solution:** The service catches the `Failed to fetch` error. If detected, it automatically loads `FALLBACK_TLE_SNAPSHOT`—a hardcoded constant containing real TLE strings for major GEO satellites (Intelsat, GOES, Galaxy, etc.). This ensures the app is always demonstrable, even without a proxy server.
+**Solution:** The service catches the `Failed to fetch` error. If detected, it automatically loads `FALLBACK_TLE_SNAPSHOT`—a hardcoded constant containing real TLE strings for **8 curated satellites** (GOES-13, INTELSAT 901, GALAXY 15, etc.). This ensures the app is always demonstrable and the ML model always has real physics data to train on, even without a proxy server.
 
 ---
 
@@ -206,7 +217,7 @@ This section traces the exact flow of data from user input to visual alert.
 
 1.  **Initialization:**
     *   User enters credentials in `SpaceTrackLogin`.
-    *   `satelliteData.ts` fetches ~60 TLE records (GEO Focused).
+    *   `satelliteData.ts` fetches ~100 TLE records (GEO Focused).
     *   **Result:** A `RealSatellite[]` array is stored in React State.
 
 2.  **Training (The "Loading" Screen):**

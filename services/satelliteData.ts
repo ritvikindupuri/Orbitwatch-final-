@@ -120,7 +120,8 @@ export async function fetchSpaceTrackCatalog(identity: string, password: string)
         // GEO FOCUSED QUERY:
         // We limit the fetch to objects with Mean Motion ~1.0 (Geosynchronous) and Low Eccentricity.
         // This ensures the model trains specifically on Station-Keeping physics.
-        const geoQuery = `/class/gp/MEAN_MOTION/0.99--1.01/ECCENTRICITY/<0.01/limit/60/format/3le`;
+        // Updated to fetch 100 records to provide a more statistically significant population sample.
+        const geoQuery = `/class/gp/MEAN_MOTION/0.99--1.01/ECCENTRICITY/<0.01/limit/100/format/3le`;
 
         const response = await fetch(`${QUERY_URL}${geoQuery}`, { method: 'GET', mode: 'cors', credentials: 'include' });
 

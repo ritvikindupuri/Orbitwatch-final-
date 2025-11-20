@@ -15,7 +15,7 @@ For a deep dive into the mathematics and engineering, please read the [Technical
 
 OrbitWatch has migrated from a traditional Client-Server model to a **Thick Client** architecture. This ensures zero latency in orbital propagation and protects data privacy by running machine learning inference directly within the user's browser sandbox.
 
-![System Architecture](https://imgur.com/cu6xW8n)
+![System Architecture](https://i.imgur.com/cu6xW8n.png)
 
 ---
 

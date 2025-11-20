@@ -51,23 +51,44 @@ $$ x' = \frac{x - \mu}{\sigma} $$
 This ensures all inputs are centered around 0 with a variance of 1, allowing the Gradient Descent optimizer to converge significantly faster.
 
 ### 3.3 Model Architecture
-The model is a **Sequential Neural Network** with the following topology:
 
-```text
-[ INPUT LAYER ] (6 Neurons)
-      |
-[ DENSE LAYER ] (12 Neurons, Tanh)
-      |
-[ DENSE LAYER ] (6 Neurons, ReLU)
-      |
-[ LATENT SPACE ] (3 Neurons, ReLU)  <--- THE BOTTLENECK
-      |
-[ DENSE LAYER ] (6 Neurons, ReLU)
-      |
-[ DENSE LAYER ] (12 Neurons, Tanh)
-      |
-[ OUTPUT LAYER ] (6 Neurons, Linear)
-```
+<p align="center">
+  <img src="https://i.imgur.com/JjEf0lv.png" alt="Deep Autoencoder Architecture" width="800" />
+  <br>
+  <b>Figure 3: Deep Autoencoder Topology & Node Breakdown</b>
+</p>
+
+The model utilizes a symmetrical "hourglass" topology designed to compress orbital mechanics into a simplified manifold.
+
+**Node Breakdown:**
+
+1.  **Input Layer (6 Nodes):**
+    *   Receives the normalized Z-Scores of the 6 orbital elements (Inc, Ecc, MM, RAAN, ArgP, MA).
+    *   Acts as the interface between the SGP4 physics engine and the Neural Network.
+
+2.  **Encoder Layer (12 Nodes - Activation: Tanh):**
+    *   **Function:** High-dimensional mapping.
+    *   **Math:** Uses the Hyperbolic Tangent (`tanh`) activation function to map inputs to a range of [-1, 1]. This layer looks for non-linear correlations between elements (e.g., how Inclination correlates with RAAN precession).
+
+3.  **Compression Layer (6 Nodes - Activation: ReLU):**
+    *   **Function:** Feature Reduction.
+    *   **Math:** Uses Rectified Linear Unit (`ReLU`) to zero out weak correlations and focus on strong signal pathways, beginning the compression process.
+
+4.  **Latent Space / Bottleneck (3 Nodes - Activation: ReLU):**
+    *   **Function:** The "Concept" Layer.
+    *   **Details:** This is the most critical layer. By forcing the 6 input features into 3 neurons, the model effectively learns a "Lossy Compression" of orbital physics. It cannot simply memorize the input; it must learn the *rules* of how orbits work to fit the data through this gate.
+
+5.  **Decompression Layer (6 Nodes - Activation: ReLU):**
+    *   **Function:** Reconstruction initialization.
+    *   **Math:** Expands the latent concepts back into feature space.
+
+6.  **Decoder Layer (12 Nodes - Activation: Tanh):**
+    *   **Function:** Fine-tuning.
+    *   **Math:** Mirrors the Encoder layer to smooth out the reconstruction before the final output.
+
+7.  **Output Layer (6 Nodes - Linear):**
+    *   **Function:** Final Reconstruction.
+    *   **Result:** Produces the "Predicted" orbit. Ideally, `Output ≈ Input`.
 
 ### 3.4 Training Process
 *   **Optimizer:** Adam (Adaptive Moment Estimation) with learning rate 0.01.
@@ -90,31 +111,16 @@ We apply a scalar multiplier to convert the raw MSE (typically 0.001 - 0.5) into
 $$ Score = \min(100, MSE \times 500) $$
 
 ### 3.6 Prevention of Overfitting
-Overfitting occurs when a model memorizes the training data (noise) rather than learning the underlying physical rules. We utilize three specific strategies to prevent this, ensuring the model remains robust:
+Overfitting occurs when a model memorizes the training data (noise) rather than learning the underlying physical rules. We utilize three specific strategies to prevent this:
 
-1.  **The Information Bottleneck (Architecture):**
-    Our input vector has **6 dimensions**, but the Latent Space (middle layer) has only **3 dimensions**. This 50% compression ratio is the primary regularization technique. It makes it mathematically impossible for the model to simply learn the "Identity Function" (where Output = Input). The model *must* discard noise and retain only the correlated physics (e.g., the relationship between Mean Motion and Altitude) to traverse the bottleneck successfully.
+1.  **The Information Bottleneck:**
+    As visualized in Figure 3, the 3-neuron bottleneck (50% compression) mathematically forces the model to discard noise. It acts as a structural regularizer.
 
 2.  **Strict Epoch Limiting:**
-    We train for exactly **30 Epochs**. In experimentation, convergence typically happens around epoch 20. Training for 1000+ epochs would allow the weights to adjust to the specific floating-point quirks of the Space-Track TLE snapshot, leading to overfitting. By "early stopping" at 30, we capture the general manifold of Keplerian mechanics without memorizing specific satellite IDs.
+    We train for exactly **30 Epochs**. In experimentation, convergence typically happens around epoch 20. Training for 1000+ epochs would allow the weights to adjust to the specific floating-point quirks of the Space-Track TLE snapshot.
 
-3.  **Regime Mixing:**
-    Our data ingestion strategy explicitly forces the retrieval of both **LEO** (Mean Motion > 11.25) and **GEO** (Mean Motion ~1.0) datasets. If we trained only on LEO, the model would "overfit" to fast-moving objects and flag every GEO satellite as an anomaly due to its low speed. By feeding a diverse dataset, the model learns a generalized representation of Earth orbit physics, not just one altitude regime.
-
-### 3.7 Why this Architecture is Superior (Design Justification)
-
-**1. Versus Ensemble Models (e.g., Random Forest + SVM + Neural Net):**
-While "Voting Ensembles" are popular in Kaggle competitions, they are computationally expensive.
-*   **Constraint:** OrbitWatch runs in the browser. Running 3 separate inference engines would triple the memory usage and GPU calls, likely dropping the 3D Globe frame rate below 60fps.
-*   **Physics:** Kepler's Laws ($T^2 \propto a^3$) are universal. We do not need different models for different satellites. A single Deep Autoencoder is sufficient to capture the universal physics of orbital mechanics.
-
-**2. Versus Supervised Classification:**
-A generic Classifier (e.g., "Is this broken? Yes/No") requires **Labeled Data**.
-*   **Problem:** Real-world satellite hacks and kinetic breakups are extremely rare and highly classified. We do not have a dataset of 10,000 "Hacked Satellites" to train a classifier on.
-*   **Solution:** The Autoencoder is **Unsupervised**. It detects *deviations from the norm*. This makes it superior for this domain because it can detect *novel* (Zero-Day) threats that have never been seen before, simply because they defy the laws of physics the model learned from the nominal population.
-
-**3. Versus Isolation Forests:**
-Isolation Forests are standard for outlier detection but struggle with high-dimensional non-linear relationships. Orbital elements are non-linearly correlated (e.g., the relationship between Eccentricity and Mean Anomaly). The non-linear activation functions (`ReLU`, `Tanh`) in our Deep Neural Network allow it to model these complex orbital curves significantly better than linear statistical methods.
+3.  **Regime Mixing (LEO + GEO):**
+    The ingestion pipeline fetches both **LEO** (Mean Motion > 11.25) and **GEO** (Mean Motion ~1.0) datasets. This prevents the model from overfitting to "Fast" objects and ensures the Autoencoder generalizes across all altitudes.
 
 ---
 
@@ -124,32 +130,19 @@ Isolation Forests are standard for outlier detection but struggle with high-dime
 The app attempts to connect to `https://www.space-track.org/ajaxauth/login`.
 *   **Method:** POST
 *   **Payload:** `identity` (username), `password`.
-*   **Query:** We execute two parallel queries to `basicspacedata/query`:
-    1.  **LEO Query:** `MEAN_MOTION > 11.25` (Objects completing >11 orbits per day).
-    2.  **GEO Query:** `MEAN_MOTION 0.99--1.01` (Objects completing ~1 orbit per day).
-    *   *Why?* We need both regimes to ensure the ML model doesn't learn that "Fast = Normal" and flag all GEO satellites as anomalies.
+*   **Query:** We execute two parallel queries to `basicspacedata/query` to fetch LEO and GEO subsets simultaneously.
 
 ### 4.2 The CORS Fallback Mechanism
-**Problem:** Space-Track.org does not set `Access-Control-Allow-Origin` headers for localhost requests. Browsers will block the API call due to Cross-Origin Resource Sharing (CORS) policies.
+**Problem:** Space-Track.org does not set `Access-Control-Allow-Origin` headers for localhost requests.
 **Solution:** The service catches the `Failed to fetch` error. If detected, it automatically loads `FALLBACK_TLE_SNAPSHOT`—a hardcoded constant containing real TLE strings for ~20 major satellites (Starlink, GPS, NOAA, etc.). This ensures the app is always demonstrable, even without a proxy server.
-
-### 4.3 TLE Parsing
-We use a custom parser to convert the 3-line string format into a JSON object (`RealSatellite`).
-*   **Regex Logic:** Used to extract the NORAD ID, International Designator (Launch Year), and raw TLE lines.
-*   **Country Detection:** We parse the `OBJECT_NAME` against a heuristic list (e.g., `BEIDOU` -> China, `GALILEO` -> EU) to assign the `OWNER` field.
 
 ---
 
-## 5. Orbital Physics Engine (`components/AnomalyDetailView.tsx` & `MapDisplay.tsx`)
+## 5. Orbital Physics Engine
 
 We utilize **SGP4 (Simplified General Perturbations 4)**, the NASA/NORAD standard for propagating satellite orbits.
 
-### 5.1 Coordinate Systems
-*   **TLE Data:** Provides Keplerian elements at a specific "Epoch" (time snapshot).
-*   **ECI (Earth-Centered Inertial):** The propagator outputs X, Y, Z coordinates in km relative to the center of the earth, fixed to the stars (does not rotate with Earth).
-*   **Geodetic (Lat/Lng/Alt):** We must account for Earth's rotation (GMST - Greenwich Mean Sidereal Time) to convert ECI to Latitude, Longitude, and Altitude.
-
-### 5.2 Historical Reconstruction
+### 5.1 Historical Reconstruction
 In `AnomalyDetailView.tsx`, we generate the "Orbital History" charts. Since we don't store past data in a database, we **mathematically reconstruct** it.
 *   We take the current TLE.
 *   We run the SGP4 propagator in a loop, decrementing time by 15 minutes for 96 steps (24 hours).
@@ -162,53 +155,25 @@ In `AnomalyDetailView.tsx`, we generate the "Orbital History" charts. Since we d
 ### 6.1 `App.tsx`
 The root orchestrator.
 *   **State:** `satelliteCatalog` (Data), `alerts` (Active Anomalies), `isAuthenticated` (View Switching).
-*   **Analysis Loop:** A `useEffect` hook runs every 7 seconds. It selects a random satellite from the catalog and passes it to `generateAnomalyAnalysis()`. The result updates the `alerts` state.
+*   **Analysis Loop:** A `useEffect` hook runs every 7 seconds. It selects a random satellite from the catalog and passes it to `generateAnomalyAnalysis()`.
 
-### 6.2 `MapDisplay.tsx`
-*   **Library:** `react-globe.gl`.
-*   **Performance:** Uses Instanced Mesh Rendering to draw 3000+ points at 60FPS.
-*   **The Animation Loop:** A `setInterval` runs every 1000ms. It:
-    1.  Gets the current time `new Date()`.
-    2.  Propagates *every* satellite in the catalog to find its new Lat/Lng.
-    3.  Updates the `pointsData` prop of the Globe.
-*   **Visuals:**
-    *   *Points:* Colored by Risk Level (Red=Critical, Cyan=Selected).
-    *   *Rings:* `ringsData` creates the pulsating effect at the Lat/Lng of anomalies.
+### 6.2 `MapDisplay.tsx` (3D Visualization)
+*   **Engine:** `react-globe.gl`.
+*   **Ripple Visualization:** Instead of "beams", anomalies are rendered as **pulsating 2D rings** (`ringsData`) on the surface of the globe. The color of the ring corresponds to the Risk Level (Red/Orange/Yellow).
+*   **User Interaction:** The `onRingClick` handler allows users to click directly on a pulsating ripple to select the anomaly, passing the ID up to the parent orchestrator.
 
-### 6.3 `DashboardPanel.tsx`
-Displays the list of active alerts.
-*   **Filtering:** Implements client-side filtering for Country, Object Type, and Search Text.
-*   **Charts:** Uses `recharts` to render the Risk Distribution bar chart based on the aggregation of the `alerts` state.
+### 6.3 `DashboardPanel.tsx` (Control Interface)
+*   **Debounced Filtering:** The search input utilizes a **300ms debounce**. This ensures that the filtering logic (which matches against Name, NORAD ID, Risk Level, Country, and Type) only runs once the user stops typing, preventing UI lag during rapid input.
+*   **Risk Distribution:** Uses `recharts` to render a dynamic bar chart summarizing the threat landscape.
 
-### 6.4 `AnomalyDetailView.tsx`
-The deep-dive view.
+### 6.4 `AnomalyDetailView.tsx` (Deep Analysis)
+The deep-dive view containing:
+*   **Threat Classification Card:** Displays the **ML Risk Score** with an interactive tooltip explaining the MSE calculation. It also lists the specific **MITRE ATT&CK®** technique ID and **SPARTA** classification mapping.
 *   **Live Vectors:** Runs its own 1-second interval SGP4 loop to show the "odometer" style changing numbers for Altitude/Velocity.
-*   **Tooltips:** Renders the explanation for the ML Score.
+*   **Charts:** Area charts for Altitude and Velocity history, sized to fit without scrolling cutoff.
 
 ---
 
-## 7. Risk & Threat Classification
-
-The system maps the numerical ML score to industry-standard frameworks.
-
-| Risk Score | Level | Interpretation |
-| :--- | :--- | :--- |
-| 0 - 20 | Informational | Nominal station-keeping. |
-| 21 - 45 | Low | Minor variance, likely sensor noise or drag. |
-| 46 - 70 | Moderate | Statistically significant deviation. |
-| 71 - 90 | High | Strong anomaly. Unannounced maneuver. |
-| 91 - 100 | Critical | Physics breakdown. Possible breakup or kinetic event. |
-
-**MITRE ATT&CK mapping:**
-We map the anomaly type to cyber-threat IDs (e.g., `T1584`) to simulate how a cyber-attack on a satellite's guidance system would manifest physically as an orbital anomaly.
-
----
-
-## 8. Conclusion & Future Roadmap
+## 7. Conclusion & Future Roadmap
 
 OrbitWatch demonstrates that advanced SDA capabilities can be delivered via the browser without compromising on physical accuracy or algorithmic depth. By moving the ML and Physics logic to the client, we enable scalable, secure, and high-performance monitoring suitable for modern space operations centers.
-
-**Future Work:**
-*   Integration with real-time weather APIs (NOAA) to correlate drag effects.
-*   Expansion of the Autoencoder to LSTM (Long Short-Term Memory) for temporal sequence analysis.
-*   VR/AR support via WebXR for immersive mission control.

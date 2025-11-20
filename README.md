@@ -15,6 +15,9 @@ For a deep dive into the mathematics and engineering, please read the [Technical
 
 OrbitWatch has migrated from a traditional Client-Server model to a **Thick Client** architecture. This ensures zero latency in orbital propagation and protects data privacy by running machine learning inference directly within the user's browser sandbox.
 
+### Architectural Overview
+The diagram below illustrates the complete component interaction model. Note how the **Browser Runtime** encapsulates the entire logic stack—including the Physics Engine (SGP4) and the AI Inference Engine (TensorFlow.js)—isolating it from external network dependencies after the initial data fetch.
+
 ![System Architecture](https://i.imgur.com/cu6xW8n.png)
 
 ---
@@ -87,28 +90,12 @@ To ensure the model is production-grade and robust against overfitting:
 
 ## 📡 Data Flow & API Integration
 
-The application prioritizes real data but is built to be resilient.
+The application prioritizes real data but is built to be resilient against browser security restrictions.
 
-```text
-[User Credentials] 
-       ⬇
-[Space-Track Authentication Endpoint]
-       ⬇
-[Fetch /basicspacedata/query] <--- (Requests LEO & GEO Catalog)
-       ⬇
-    (Success?) 
-    /    \
-  YES     NO (CORS Block)
-   |       |
-   |    [Load Local TLE Snapshot]
-   |       |
-   ⬇       ⬇
-[Raw TLE String Processing]
-       ⬇
-[TensorFlow.js Vectorization]
-       ⬇
-[Model Training (30 Epochs)]
-```
+### Logic Flowchart
+The diagram below details the ingestion lifecycle. It visualizes the path from User Credentials to Space-Track Authentication. Crucially, it depicts the **CORS Fallback Mechanism**, where the system intelligently switches to a cached real-world snapshot if browser security policies block the direct API connection. This ensures that the TensorFlow model *always* receives valid physics data for training, regardless of network conditions.
+
+![Data Flow](https://i.imgur.com/ceADblA.png)
 
 ---
 

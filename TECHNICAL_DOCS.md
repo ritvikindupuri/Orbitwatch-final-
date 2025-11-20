@@ -1,6 +1,6 @@
 
 # OrbitWatch: Technical Documentation
-by: Ritvik Induprui
+by: Ritvik Indupuri
 
 ## 1. Executive Summary
 

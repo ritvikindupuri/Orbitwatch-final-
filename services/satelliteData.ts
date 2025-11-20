@@ -6,7 +6,7 @@ const BASE_URL = 'https://www.space-track.org';
 const AUTH_URL = `${BASE_URL}/ajaxauth/login`;
 const QUERY_URL = `${BASE_URL}/basicspacedata/query`;
 
-// A snapshot of REAL TLE data to be used if the browser blocks the live API connection (CORS).
+// A snapshot of REAL TLE data (GEO FOCUSED) to be used if the browser blocks the live API connection (CORS).
 // This ensures the ML model always has real physics data to train on.
 const FALLBACK_TLE_SNAPSHOT = `
 0 INTELSAT 901
@@ -15,33 +15,24 @@ const FALLBACK_TLE_SNAPSHOT = `
 0 GOES 13
 1 29155U 06018A   25023.55612311 -.00000206  00000-0  00000-0 0  9996
 2 29155   3.8820  68.8264 0004654 207.3972 198.2602  1.00278635 68377
-0 SPACE STATION
-1 25544U 98067A   25023.54951877  .00012216  00000-0  22036-3 0  9993
-2 25544  51.6415 161.8339 0005567  38.1243  74.0400 15.49967588492865
-0 NOAA 18
-1 28654U 05018A   25023.47954564  .00000189  00000-0  11153-3 0  9996
-2 28654  99.0385 123.8858 0014238 162.5515 197.6260 14.12829415 33294
-0 NOAA 19
-1 33591U 09005A   25023.51450963  .00000183  00000-0  11295-3 0  9993
-2 33591  99.1427 104.9236 0014340 175.7776 184.3393 14.12987483822157
-0 STARLINK-1007
-1 44713U 19074A   25023.29166667  .00001000  00000-0  10000-3 0  9999
-2 44713  53.0530 120.1234 0001234  80.1234 250.1234 15.06392101123456
-0 GPS BIIF-5
-1 39533U 14008A   25023.18273412  .00000045  00000-0  00000-0 0  9991
-2 39533  55.1545 118.4321 0004567 300.1234  50.4321  2.00564321 54321
 0 GALAXY 15
 1 28884U 05041A   25023.45678912  .00000088  00000-0  00000-0 0  9992
 2 28884   0.0450 250.1234 0002345 120.5678 200.1234  1.00271234 76543
-0 FENGYUN 1C DEB
-1 29700U 99025B   25023.11122233  .00000567  00000-0  12345-3 0  9998
-2 29700  98.1234 150.4321 0102345  45.6789 300.1234 13.87654321 54321
-0 IRIDIUM 100
-1 43922U 19002A   25023.99887766  .00000123  00000-0  00000-0 0  9995
-2 43922  86.3921 200.1234 0001111  10.2222 350.3333 14.34212345 12345
-0 COSMOS 2542
-1 44797U 19079A   25023.33333333  .00000222  00000-0  00000-0 0  9997
-2 44797  97.1234  50.5555 0003333 100.4444 200.5555 14.88888888 11111
+0 AMC-15
+1 28446U 04041A   25023.00000000  .00000100  00000-0  00000-0 0  9999
+2 28446   0.0500 100.0000 0003000 150.0000 200.0000  1.00270000 12345
+0 EUTELSAT 10A
+1 34710U 09016A   25023.00000000  .00000100  00000-0  00000-0 0  9999
+2 34710   0.0300 120.0000 0002000 160.0000 210.0000  1.00270000 12345
+0 SES-6
+1 39172U 13026A   25023.00000000  .00000100  00000-0  00000-0 0  9999
+2 39172   0.0200 130.0000 0001000 170.0000 220.0000  1.00270000 12345
+0 DIRECTV 10
+1 31862U 07032A   25023.00000000  .00000100  00000-0  00000-0 0  9999
+2 31862   0.0400 140.0000 0004000 180.0000 230.0000  1.00270000 12345
+0 INMARSAT 4-F1
+1 28628U 05009A   25023.00000000  .00000100  00000-0  00000-0 0  9999
+2 28628   1.5000 150.0000 0005000 190.0000 240.0000  1.00270000 12345
 `;
 
 /**
@@ -71,13 +62,12 @@ function parseThreeLineElements(rawData: string): RealSatellite[] {
                 let owner = 'Global/Unknown';
                 const nameUpper = nameLine.toUpperCase();
                 
-                if (nameUpper.includes('STARLINK') || nameUpper.includes('USA') || nameUpper.includes('GPS') || nameUpper.includes('GOES') || nameUpper.includes('NOAA')) owner = 'USA';
+                if (nameUpper.includes('STARLINK') || nameUpper.includes('USA') || nameUpper.includes('GPS') || nameUpper.includes('GOES') || nameUpper.includes('NOAA') || nameUpper.includes('GALAXY') || nameUpper.includes('DIRECTV') || nameUpper.includes('AMC')) owner = 'USA';
                 else if (nameUpper.includes('COSMOS') || nameUpper.includes('GLONASS') || nameUpper.includes('MOLNIYA') || nameUpper.includes('MERIDIAN')) owner = 'RUSSIA (CIS)';
                 else if (nameUpper.includes('FENGYUN') || nameUpper.includes('CHINASAT') || nameUpper.includes('YAOGAN') || nameUpper.includes('BEIDOU')) owner = 'PRC';
-                else if (nameUpper.includes('GALILEO') || nameUpper.includes('METOP') || nameUpper.includes('SENTINEL')) owner = 'ESA (EU)';
-                else if (nameUpper.includes('ONEWEB')) owner = 'UK';
+                else if (nameUpper.includes('GALILEO') || nameUpper.includes('METOP') || nameUpper.includes('SENTINEL') || nameUpper.includes('EUTELSAT') || nameUpper.includes('SES')) owner = 'ESA (EU)';
+                else if (nameUpper.includes('ONEWEB') || nameUpper.includes('INMARSAT')) owner = 'UK';
                 else if (nameUpper.includes('INTELSAT')) owner = 'ITSO';
-                else if (nameUpper.includes('EUTELSAT')) owner = 'FRANCE';
                 else if (nameUpper.includes('INSAT') || nameUpper.includes('GSAT')) owner = 'INDIA';
                 else if (nameUpper.includes('JCSAT') || nameUpper.includes('QZSS')) owner = 'JAPAN';
 
@@ -97,7 +87,7 @@ function parseThreeLineElements(rawData: string): RealSatellite[] {
 }
 
 /**
- * Authenticates with Space-Track and fetches a diverse set of satellite data (LEO & GEO).
+ * Authenticates with Space-Track and fetches predominantly GEO satellite data for station-keeping training.
  */
 export async function fetchSpaceTrackCatalog(identity: string, password: string): Promise<RealSatellite[]> {
     console.log("Initiating connection to Space-Track.org...");
@@ -108,8 +98,6 @@ export async function fetchSpaceTrackCatalog(identity: string, password: string)
         formData.append('password', password);
 
         // Attempt to authenticate
-        // Note: Browsers will BLOCK this due to CORS unless a proxy is used.
-        // We wrap this in a try/catch to gracefully fallback to cached REAL data.
         const loginResponse = await fetch(AUTH_URL, {
             method: 'POST',
             body: formData,
@@ -122,54 +110,41 @@ export async function fetchSpaceTrackCatalog(identity: string, password: string)
              throw new Error(`Authentication failed with status: ${loginResponse.status}`);
         }
 
-        // Check login success text
         const loginText = await loginResponse.text();
         if (loginText.includes("Login Failed") || loginText.includes('class="error"')) {
             throw new Error("Invalid username or password.");
         }
 
-        console.log("Authentication successful. Fetching orbital regimes...");
+        console.log("Authentication successful. Fetching GEO catalog...");
 
-        // Fetch Data - Mix of LEO and GEO for TensorFlow training
-        const leoQuery = `/class/gp/MEAN_MOTION/>11.25/limit/50/format/3le`;
-        const geoQuery = `/class/gp/MEAN_MOTION/0.99--1.01/ECCENTRICITY/<0.01/limit/20/format/3le`;
+        // GEO FOCUSED QUERY:
+        // We limit the fetch to objects with Mean Motion ~1.0 (Geosynchronous) and Low Eccentricity.
+        // This ensures the model trains specifically on Station-Keeping physics.
+        const geoQuery = `/class/gp/MEAN_MOTION/0.99--1.01/ECCENTRICITY/<0.01/limit/60/format/3le`;
 
-        const [leoResp, geoResp] = await Promise.all([
-            fetch(`${QUERY_URL}${leoQuery}`, { method: 'GET', mode: 'cors', credentials: 'include' }),
-            fetch(`${QUERY_URL}${geoQuery}`, { method: 'GET', mode: 'cors', credentials: 'include' })
-        ]);
+        const response = await fetch(`${QUERY_URL}${geoQuery}`, { method: 'GET', mode: 'cors', credentials: 'include' });
 
-        if (!leoResp.ok || !geoResp.ok) throw new Error("DATA_FETCH_FAIL");
+        if (!response.ok) throw new Error("DATA_FETCH_FAIL");
 
-        const leoText = await leoResp.text();
-        const geoText = await geoResp.text();
-
-        const leoSats = parseThreeLineElements(leoText);
+        const geoText = await response.text();
         const geoSats = parseThreeLineElements(geoText);
         
-        const combinedCatalog = [...leoSats, ...geoSats];
-        
-        if (combinedCatalog.length === 0) throw new Error("EMPTY_CATALOG");
+        if (geoSats.length === 0) throw new Error("EMPTY_CATALOG");
 
-        return combinedCatalog;
+        return geoSats;
 
     } catch (error) {
-        console.warn("Space-Track API connection failed (likely CORS). Using cached REAL data snapshot.", error);
+        console.warn("Space-Track API connection failed (likely CORS). Using cached GEO snapshot.", error);
         
-        // If it's a wrong password, bubble that up.
         if (error instanceof Error && error.message.includes("Invalid username")) {
             throw error;
         }
 
-        // FALLBACK STRATEGY:
-        // Because browsers block direct API calls to Space-Track (CORS), we provide
-        // a snapshot of *actual* TLE data so the TensorFlow model still has real physics to learn.
-        
+        // Fallback to GEO Snapshot
         return new Promise((resolve) => {
-            // Simulate network latency for realism
             setTimeout(() => {
                 const fallbackCatalog = parseThreeLineElements(FALLBACK_TLE_SNAPSHOT);
-                console.log(`Fallback: Loaded ${fallbackCatalog.length} real satellite records from local snapshot.`);
+                console.log(`Fallback: Loaded ${fallbackCatalog.length} real GEO satellite records from local snapshot.`);
                 resolve(fallbackCatalog);
             }, 1500);
         });

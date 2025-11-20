@@ -43,7 +43,7 @@ Unlike rule-based systems, OrbitWatch uses **Unsupervised Learning**. We do not 
 
 **Key Strategies:**
 1.  **Deep Autoencoder:** We utilize a sequential neural network to learn the manifold of Keplerian physics.
-2.  **Regime Mixing:** The model is trained on a diverse dataset of both LEO and GEO objects to prevent overfitting to specific orbital speeds.
+2.  **GEO-Centric Specialization:** The model is specifically trained on the **Geostationary Belt** physics. This allows for highly sensitive detection of station-keeping drift and unannounced inclination maneuvers in high-value assets.
 3.  **Information Bottleneck:** A 3-neuron latent space forces the model to learn structural correlations rather than memorizing noise.
 
 ---

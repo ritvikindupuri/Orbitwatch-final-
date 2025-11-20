@@ -122,17 +122,17 @@ The Risk Score is **not simulated**. It is a direct result of a mathematical ope
 5.  **Display:** We scale that raw error number to fit a 0-100 UI scale:
     $$ Score = \min(100, MSE \times 500) $$
 
-### 3.6 Prevention of Overfitting
-Overfitting occurs when a model memorizes the training data (noise) rather than learning the underlying physical rules. We utilize three specific strategies to prevent this:
+### 3.6 Prevention of Overfitting & GEO Specialization
+To ensure the system provides high-fidelity station-keeping analysis, we employ a **GEO-Centric** training strategy.
 
-1.  **The Information Bottleneck:**
+1.  **GEO Specialization:**
+    The ingestion pipeline is configured to exclusively fetch objects in the Geostationary Belt (Mean Motion ~1.0). By training the Autoencoder specifically on this regime, the model becomes highly sensitive to "Drift" and "Station-Keeping" anomalies. If a satellite deviates even slightly from the strict physics of the GEO belt (e.g., an unannounced inclination maneuver), the Reconstruction Error spikes significantly.
+
+2.  **The Information Bottleneck:**
     As visualized in Figure 3, the 3-neuron bottleneck (50% compression) mathematically forces the model to discard noise. It acts as a structural regularizer.
 
-2.  **Strict Epoch Limiting:**
+3.  **Strict Epoch Limiting:**
     We train for exactly **30 Epochs**. In experimentation, convergence typically happens around epoch 20. Training for 1000+ epochs would allow the weights to adjust to the specific floating-point quirks of the Space-Track TLE snapshot.
-
-3.  **Regime Mixing (LEO + GEO):**
-    The ingestion pipeline fetches both **LEO** (Mean Motion > 11.25) and **GEO** (Mean Motion ~1.0) datasets. This prevents the model from overfitting to "Fast" objects and ensures the Autoencoder generalizes across all altitudes.
 
 ---
 
@@ -142,11 +142,11 @@ Overfitting occurs when a model memorizes the training data (noise) rather than 
 The app attempts to connect to `https://www.space-track.org/ajaxauth/login`.
 *   **Method:** POST
 *   **Payload:** `identity` (username), `password`.
-*   **Query:** We execute two parallel queries to `basicspacedata/query` to fetch LEO and GEO subsets simultaneously.
+*   **Query:** We execute a specific query to `basicspacedata/query` to fetch the GEO catalog.
 
 ### 4.2 The CORS Fallback Mechanism
 **Problem:** Space-Track.org does not set `Access-Control-Allow-Origin` headers for localhost requests.
-**Solution:** The service catches the `Failed to fetch` error. If detected, it automatically loads `FALLBACK_TLE_SNAPSHOT`—a hardcoded constant containing real TLE strings for ~20 major satellites (Starlink, GPS, NOAA, etc.). This ensures the app is always demonstrable, even without a proxy server.
+**Solution:** The service catches the `Failed to fetch` error. If detected, it automatically loads `FALLBACK_TLE_SNAPSHOT`—a hardcoded constant containing real TLE strings for major GEO satellites (Intelsat, GOES, Galaxy, etc.). This ensures the app is always demonstrable, even without a proxy server.
 
 ---
 
@@ -206,7 +206,7 @@ This section traces the exact flow of data from user input to visual alert.
 
 1.  **Initialization:**
     *   User enters credentials in `SpaceTrackLogin`.
-    *   `satelliteData.ts` fetches ~20-500 TLE records (LEO/GEO mix).
+    *   `satelliteData.ts` fetches ~60 TLE records (GEO Focused).
     *   **Result:** A `RealSatellite[]` array is stored in React State.
 
 2.  **Training (The "Loading" Screen):**

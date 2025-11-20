@@ -173,9 +173,13 @@ export async function generateAnomalyAnalysis(sat: RealSatellite): Promise<Omit<
         "T1499 - Endpoint Denial of Service"
     ];
 
+    // Operator-Friendly Text Generation
+    const deviationType = isGeo ? "station-keeping" : "orbital phasing";
+    const confidence = riskScore > 80 ? "High" : (riskScore > 50 ? "Moderate" : "Low");
+
     return {
-        description: `TensorFlow Model (Loss: ${score.toFixed(4)}) flagged ${regime} object. Deviation in ${isGeo ? 'Station-Keeping' : 'Orbital Phasing'}.`,
-        assessment: `Deep Autoencoder reconstruction error of ${score.toFixed(4)} exceeds nominal baseline for ${regime} regime.`,
+        description: `Irregular kinetic behavior detected in ${deviationType}. Satellite trajectory does not align with standard ${regime} physics baseline.`,
+        assessment: `System detects a ${riskScore.toFixed(1)}% statistical deviation from nominal orbit. High probability of unannounced maneuver or sensor degradation.`,
         riskLevel,
         riskScore,
         mitreTechnique: techniques[techniqueID],

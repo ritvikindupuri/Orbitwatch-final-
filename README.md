@@ -1,5 +1,5 @@
 
-# OrbitWatch: ML-Powered Space Domain Awareness (SDA) Platform
+# OrbitWatch: AI-Powered Space Domain Awareness (SDA) Platform
 
 **OrbitWatch** is a cutting-edge, client-side application designed to simulate the capabilities of a Space Operations Center (SpOC). It ingests real orbital telemetry (TLE data), visualizes assets on an interactive 3D globe, and employs a browser-based Deep Autoencoder to detect station-keeping anomalies and potential cyber-kinetic threats in real-time.
 

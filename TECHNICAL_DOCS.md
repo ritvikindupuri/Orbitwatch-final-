@@ -105,18 +105,17 @@ The model utilizes a symmetrical "hourglass" topology designed to compress orbit
 *   **Execution:** Runs on the GPU via WebGL to prevent freezing the UI thread.
 
 ### 3.5 Anomaly Scoring Logic
-During the operational phase, we feed live satellite data into the trained model.
-1.  **Input:** Real Orbit ($X$)
-2.  **Output:** Reconstructed Orbit ($\hat{X}$)
-3.  **MSE Calculation:** $Error = \frac{1}{n} \sum (X - \hat{X})^2$
+The Risk Score is **not simulated**. It is a direct result of a mathematical operation performed by the TensorFlow engine in real-time. The calculation flow is as follows:
 
-**Interpretation:**
-*   **Low Error:** The satellite conforms to the patterns learned from the general population (Nominal).
-*   **High Error:** The satellite has orbital parameters that statistically deviate from the learned manifold (Anomaly).
-
-**Risk Score Scaling:**
-We apply a scalar multiplier to convert the raw MSE (typically 0.001 - 0.5) into a human-readable 0-100 score.
-$$ Score = \min(100, MSE \times 500) $$
+1.  **Input:** We take the real physics data (Input Tensor $X$) derived from the SGP4 propagation.
+2.  **Processing:** The Neural Network passes these numbers through its layers, compressing them into 3 numbers (Latent Space) and then attempting to expand them back to 6.
+3.  **Calculation:** We execute `tf.losses.meanSquaredError(input, output)`.
+    *   This subtracts the **Output** (what the model thinks the orbit *should* look like based on its training) from the **Input** (what the orbit *actually* looks like).
+4.  **The Score (Reconstruction Error):**
+    *   If the satellite follows standard orbital mechanics, the error is tiny (e.g., 0.002).
+    *   If the satellite is anomalous (deviating from the learned physics manifold), the error is high (e.g., 0.5).
+5.  **Display:** We scale that raw error number to fit a 0-100 UI scale:
+    $$ Score = \min(100, MSE \times 500) $$
 
 ### 3.6 Prevention of Overfitting
 Overfitting occurs when a model memorizes the training data (noise) rather than learning the underlying physical rules. We utilize three specific strategies to prevent this:
@@ -150,11 +149,12 @@ The app attempts to connect to `https://www.space-track.org/ajaxauth/login`.
 
 We utilize **SGP4 (Simplified General Perturbations 4)**, the NASA/NORAD standard for propagating satellite orbits.
 
-### 5.1 Historical Reconstruction
-In `AnomalyDetailView.tsx`, we generate the "Orbital History" charts. Since we don't store past data in a database, we **mathematically reconstruct** it.
-*   We take the current TLE.
-*   We run the SGP4 propagator in a loop, decrementing time by 15 minutes for 96 steps (24 hours).
-*   This generates the precise Altitude and Velocity curves seen in the UI.
+### 5.1 Real-Time Historical Reconstruction
+In `AnomalyDetailView.tsx`, we generate the "Orbital History" charts. Since the application is client-side and stateless regarding long-term history, we **mathematically reconstruct** the past 24 hours using a **Moving Window** strategy.
+
+*   **Trigger:** A `setInterval` hook fires every 5 seconds, updating the reference `now` timestamp.
+*   **Process:** The SGP4 propagator runs in a loop, calculating positions for `t = now`, `t = now - 15m`, `t = now - 30m`, etc., for 96 steps.
+*   **Result:** The charts (Altitude/Velocity) shift dynamically in real-time, simulating a live data stream filling the buffer, even though the data is derived from the physics engine on the fly.
 
 ---
 

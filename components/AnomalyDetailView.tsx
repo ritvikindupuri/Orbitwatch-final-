@@ -37,15 +37,26 @@ const AnalysisSection: React.FC<{title: string, content: string | undefined}> = 
     </div>
 );
 
-// --- SGP4 Orbital History Chart ---
+// --- SGP4 Orbital History Chart (Real-Time Moving Window) ---
 const OrbitalHistoryChart: React.FC<{ sat: RealSatellite }> = ({ sat }) => {
+    // State to track "now" and force re-renders for the moving window effect
+    const [now, setNow] = useState(new Date());
+
+    useEffect(() => {
+        // Update the graph time window every 5 seconds to simulate live data ingestion
+        const interval = setInterval(() => {
+            setNow(new Date());
+        }, 5000);
+        return () => clearInterval(interval);
+    }, []);
+
     const historyData = useMemo(() => {
         const satrec = satellite.twoline2satrec(sat.TLE_LINE1, sat.TLE_LINE2);
         if (!satrec || satrec.error) return [];
 
         const data = [];
-        const now = new Date();
         // Generate data for past 24 hours (1440 minutes) in 15 minute steps
+        // We use 'now' state to anchor the time, creating the sliding window effect
         for (let i = 24 * 4; i >= 0; i--) {
             const t = new Date(now.getTime() - (i * 15 * 60 * 1000));
             const positionAndVelocity = satellite.propagate(satrec, t);
@@ -71,13 +82,19 @@ const OrbitalHistoryChart: React.FC<{ sat: RealSatellite }> = ({ sat }) => {
             }
         }
         return data;
-    }, [sat]);
+    }, [sat, now]);
 
     if (historyData.length === 0) return null;
 
     return (
         <div className="p-3 rounded-lg bg-gray-800/70 space-y-6">
-            <p className="text-xs text-cyan-200/80 font-semibold uppercase mb-1">Orbital History (Reconstructed)</p>
+            <div className="flex justify-between items-center mb-1">
+                <p className="text-xs text-cyan-200/80 font-semibold uppercase">Orbital History (Live Window)</p>
+                <span className="flex items-center text-[10px] text-green-400 font-mono animate-pulse">
+                    <span className="w-1.5 h-1.5 bg-green-400 rounded-full mr-1"></span>
+                    LIVE
+                </span>
+            </div>
             
             <div className="h-48 w-full">
                 <p className="text-[10px] text-gray-400 text-center mb-1">Altitude Variation (km)</p>
@@ -96,7 +113,7 @@ const OrbitalHistoryChart: React.FC<{ sat: RealSatellite }> = ({ sat }) => {
                             contentStyle={{backgroundColor: '#111827', borderColor: '#374151', fontSize: '12px'}}
                             itemStyle={{color: '#22d3ee'}}
                         />
-                        <Area type="monotone" dataKey="alt" stroke="#22d3ee" fillOpacity={1} fill="url(#colorAlt)" strokeWidth={2} />
+                        <Area type="monotone" dataKey="alt" stroke="#22d3ee" fillOpacity={1} fill="url(#colorAlt)" strokeWidth={2} isAnimationActive={false} />
                     </AreaChart>
                 </ResponsiveContainer>
             </div>
@@ -118,7 +135,7 @@ const OrbitalHistoryChart: React.FC<{ sat: RealSatellite }> = ({ sat }) => {
                              contentStyle={{backgroundColor: '#111827', borderColor: '#374151', fontSize: '12px'}}
                              itemStyle={{color: '#f97316'}}
                         />
-                        <Area type="monotone" dataKey="vel" stroke="#f97316" fillOpacity={1} fill="url(#colorVel)" strokeWidth={2} />
+                        <Area type="monotone" dataKey="vel" stroke="#f97316" fillOpacity={1} fill="url(#colorVel)" strokeWidth={2} isAnimationActive={false} />
                     </AreaChart>
                 </ResponsiveContainer>
             </div>

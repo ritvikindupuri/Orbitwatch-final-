@@ -66,7 +66,7 @@ This ensures all inputs are centered around 0 with a variance of 1, allowing the
 <p align="center">
   <img src="https://i.imgur.com/JjEf0lv.png" alt="Deep Autoencoder Architecture" width="400" />
   <br>
-  <b>Figure 3: Deep Autoencoder Topology & Node Breakdown</b>
+  <b>Figure 1: Deep Autoencoder Topology & Node Breakdown</b>
 </p>
 
 The model utilizes a symmetrical "hourglass" topology designed to compress orbital mechanics into a simplified manifold.
@@ -87,7 +87,7 @@ The model utilizes a symmetrical "hourglass" topology designed to compress orbit
 
 4.  **Latent Space / Bottleneck (3 Nodes - Activation: ReLU):**
     *   **Function:** The "Concept" Layer.
-    *   **Details:** This is the most critical layer. By forcing the 6 input features into 3 neurons, the model effectively learns a "Lossy Compression" of orbital physics. It cannot simply memorize the input; it must learn the *rules* of how orbits work to fit the data through this gate.
+    *   **Details:** This is the most critical layer. By forcing the 6 input features into 3 neurons, the model effectively learns a "Lossy Compression" of orbital mechanics. It cannot simply memorize the input; it must learn the *rules* of how orbits work to fit the data through this gate.
 
 5.  **Decompression Layer (6 Nodes - Activation: ReLU):**
     *   **Function:** Reconstruction initialization.
@@ -117,7 +117,7 @@ The Risk Score is **not simulated**. It is a direct result of a mathematical ope
 4.  **The Score (Reconstruction Error):**
     *   If the satellite follows standard orbital mechanics, the error is tiny (e.g., 0.002).
     *   If the satellite is anomalous (deviating from the learned physics manifold), the error is high (e.g., 0.5).
-5.  **Display:** We scale that raw error number to fit a 0-100 UI scale:
+5.  **Display:** We scale that raw error number to fit a 0-100 scale for the progress bar.
     $$ Score = \min(100, MSE \times 500) $$
 
 ### 3.6 Prevention of Overfitting & GEO Specialization
@@ -130,7 +130,7 @@ To ensure the system provides high-fidelity station-keeping analysis, we employ 
     The ingestion pipeline is configured to fetch **only** objects in the Geostationary Belt (Mean Motion 0.99--1.01), typically limiting the training set to the top **100** assets. By training the Autoencoder specifically on this regime, we effectively "over-fit" the model to the physics of perfectly stationary satellites. This makes the system **hyper-sensitive** to anomalies: even minute drift or unannounced inclination maneuvers will cause the reconstruction error to spike, flagging the object immediately.
 
 3.  **The Information Bottleneck:**
-    As visualized in Figure 3, the 3-neuron bottleneck (50% compression) mathematically forces the model to discard noise. It acts as a structural regularizer.
+    As visualized in Figure 1, the 3-neuron bottleneck (50% compression) mathematically forces the model to discard noise. It acts as a structural regularizer.
 
 4.  **Strict Epoch Limiting:**
     We train for exactly **30 Epochs**. In experimentation, convergence typically happens around epoch 20. Training for 1000+ epochs would allow the weights to adjust to the specific floating-point quirks of the Space-Track TLE snapshot.
@@ -212,6 +212,12 @@ The deep-dive view containing:
 *   **Threat Classification Card:** Displays the **ML Risk Score** with an interactive tooltip explaining the MSE calculation. It also lists the specific **MITRE ATT&CK®** technique ID and **SPARTA** classification mapping.
 *   **Live Vectors:** Runs its own 1-second interval SGP4 loop to show the "odometer" style changing numbers for Altitude/Velocity.
 *   **Charts:** Area charts for Altitude and Velocity history, sized to fit without scrolling cutoff.
+
+<p align="center">
+  <img src="https://i.imgur.com/yEoVBHW.png" alt="App Interface Screenshot" width="600" />
+  <br>
+  <b>Figure 2: The Operator Interface (AnomalyDetailView) displaying a Critical ML Risk Score (99), the Pulse Visualization on the 3D Globe, and real-time telemetry vectors.</b>
+</p>
 
 ---
 

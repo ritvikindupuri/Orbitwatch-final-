@@ -7,29 +7,48 @@
 
 **OrbitWatch** is a cutting-edge, client-side application designed to simulate the capabilities of a Space Operations Center (SpOC). It ingests real orbital telemetry (TLE data), visualizes assets on an interactive 3D globe, and employs a browser-based Deep Autoencoder to detect station-keeping anomalies and potential cyber-kinetic threats in real-time.
 
+For a deep dive into the mathematics and engineering, please read the [Technical Documentation](TECHNICAL_DOCS.md).
+
 ---
 
 ## 🏗 System Architecture
 
 OrbitWatch has migrated from a traditional Client-Server model to a **Thick Client** architecture. This ensures zero latency in orbital propagation and protects data privacy by running machine learning inference directly within the user's browser sandbox.
 
-```mermaid
-graph TD
-    User[Operator] -->|Credentials| Login[SpaceTrackLogin.tsx]
-    Login -->|Auth Request| ST_API[Space-Track.org API]
-    ST_API -->|TLE Data (LEO/GEO)| DataService[satelliteData.ts]
-    
-    subgraph "Client-Side Browser Runtime"
-        DataService -->|Raw TLEs| Physics[SGP4 Propagator]
-        DataService -->|Orbital Features| TF_Train[TensorFlow Trainer]
-        
-        TF_Train -->|Weights| ML_Model[Deep Autoencoder]
-        Physics -->|Live Vectors (Pos/Vel)| Globe[3D Visualization]
-        Physics -->|Current State| ML_Model
-        
-        ML_Model -->|Reconstruction Error| AnomalyEngine[Threat Assessment]
-        AnomalyEngine -->|Risk Score| Dashboard[UI Dashboard]
-    end
+```text
++------------------+       +------------------------+
+|    Operator      |       |   Space-Track.org API  |
++--------+---------+       +-----------+------------+
+         | Credentials                 |
+         v                             v
++--------+---------+       +-----------+------------+
+| SpaceTrackLogin  +------>|  fetchSpaceTrackCatalog|
+|   (Component)    |       |   (Data Service)       |
++--------+---------+       +-----------+------------+
+         |                             |
+         | (Auth Success)              | (Raw TLE Data)
+         v                             v
++-------------------------------------------------------+
+|             BROWSER RUNTIME (CLIENT-SIDE)             |
+|                                                       |
+|  +-------------------+      +----------------------+  |
+|  |  SGP4 Propagator  |      |  TensorFlow Trainer  |  |
+|  |   (satellite.js)  |      |   (@tensorflow/tfjs) |  |
+|  +---------+---------+      +----------+-----------+  |
+|            |                           |              |
+|            | (XYZ Vectors)             | (Weights)    |
+|            v                           v              |
+|  +---------+---------+      +----------+-----------+  |
+|  | 3D Visualization  |      |   Deep Autoencoder   |  |
+|  | (react-globe.gl)  |<---->|   (Inference Engine) |  |
+|  +---------+---------+      +----------+-----------+  |
+|            |                           |              |
+|            | (Interaction)             | (Risk Score) |
+|            v                           v              |
+|  +---------+---------+      +----------+-----------+  |
+|  |   Detail View     |<-----|   Threat Assessment  |  |
+|  +-------------------+      +----------------------+  |
++-------------------------------------------------------+
 ```
 
 ---

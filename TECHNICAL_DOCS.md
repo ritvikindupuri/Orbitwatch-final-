@@ -53,13 +53,21 @@ This ensures all inputs are centered around 0 with a variance of 1, allowing the
 ### 3.3 Model Architecture
 The model is a **Sequential Neural Network** with the following topology:
 
-1.  **Input Layer:** 6 Neurons (The Normalized Features)
-2.  **Encoder Layer 1:** 12 Neurons (`tanh` activation) - Expands dimensions to capture non-linear relationships.
-3.  **Encoder Layer 2:** 6 Neurons (`relu` activation) - Compresses data.
-4.  **Latent Space (Bottleneck):** 3 Neurons (`relu` activation) - This is the compressed "essence" of the orbit.
-5.  **Decoder Layer 1:** 6 Neurons (`relu` activation) - Expands back out.
-6.  **Decoder Layer 2:** 12 Neurons (`tanh` activation) - Reconstructs features.
-7.  **Output Layer:** 6 Neurons (`linear` activation) - The reconstructed orbit.
+```text
+[ INPUT LAYER ] (6 Neurons)
+      |
+[ DENSE LAYER ] (12 Neurons, Tanh)
+      |
+[ DENSE LAYER ] (6 Neurons, ReLU)
+      |
+[ LATENT SPACE ] (3 Neurons, ReLU)  <--- THE BOTTLENECK
+      |
+[ DENSE LAYER ] (6 Neurons, ReLU)
+      |
+[ DENSE LAYER ] (12 Neurons, Tanh)
+      |
+[ OUTPUT LAYER ] (6 Neurons, Linear)
+```
 
 ### 3.4 Training Process
 *   **Optimizer:** Adam (Adaptive Moment Estimation) with learning rate 0.01.
@@ -193,3 +201,14 @@ The system maps the numerical ML score to industry-standard frameworks.
 
 **MITRE ATT&CK mapping:**
 We map the anomaly type to cyber-threat IDs (e.g., `T1584`) to simulate how a cyber-attack on a satellite's guidance system would manifest physically as an orbital anomaly.
+
+---
+
+## 8. Conclusion & Future Roadmap
+
+OrbitWatch demonstrates that advanced SDA capabilities can be delivered via the browser without compromising on physical accuracy or algorithmic depth. By moving the ML and Physics logic to the client, we enable scalable, secure, and high-performance monitoring suitable for modern space operations centers.
+
+**Future Work:**
+*   Integration with real-time weather APIs (NOAA) to correlate drag effects.
+*   Expansion of the Autoencoder to LSTM (Long Short-Term Memory) for temporal sequence analysis.
+*   VR/AR support via WebXR for immersive mission control.

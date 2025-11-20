@@ -63,6 +63,17 @@ The diagram below details the ingestion lifecycle. It visualizes the path from U
 
 ---
 
+## Data Persistence & Database
+
+While OrbitWatch operates as a stateless client-side application by default (Architecture V1), a production-ready **PostgreSQL Schema** is provided for teams requiring historical data persistence and collaborative features.
+
+*   **Schema Location:** `database/schema.sql`
+*   **Architecture:** Designed for **Supabase (PostgreSQL)** to leverage built-in Real-Time subscriptions and Vector Search capabilities.
+*   **Capabilities:** Enables long-term TLE storage for Temporal Analysis (Phase 3 LSTM models) and multi-user operator annotation sync.
+*   **Documentation:** See **Section 9** of the [Technical Documentation](TECHNICAL_DOCS.md) for the complete schema design and integration strategy.
+
+---
+
 ## Setup & Installation Guide
 
 ### Prerequisites

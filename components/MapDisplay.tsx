@@ -197,13 +197,66 @@ export default function MapDisplay({ satelliteCatalog, alerts, selectedSatellite
             )}
 
              {/* Legend */}
-             <div className="absolute bottom-4 left-4 z-10 pointer-events-none">
-                <div className="bg-gray-900/80 backdrop-blur-sm p-3 rounded border border-gray-700 text-xs font-mono text-gray-400">
-                    <p className="font-bold text-gray-200 mb-1">VISUALIZATION</p>
-                    <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-slate-500"></span> Nominal</div>
-                    <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span> Critical (Pulsing)</div>
-                    <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></span> High (Pulsing)</div>
-                    <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-cyan-400"></span> Selected</div>
+             <div className="absolute bottom-4 left-4 z-10 pointer-events-auto">
+                <div className="bg-gray-900/80 backdrop-blur-sm p-3 rounded border border-gray-700 text-xs font-mono text-gray-400 shadow-2xl">
+                    <p className="font-bold text-gray-200 mb-2">VISUALIZATION LEGEND</p>
+                    
+                    <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-slate-500"></span> 
+                            <span>Nominal Asset</span>
+                        </div>
+
+                        {/* Critical - Interactive Tooltip */}
+                        <div className="group relative flex items-center gap-2 cursor-help">
+                            <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse shadow-[0_0_8px_rgba(244,63,94,0.8)]"></span> 
+                            <span className="text-rose-400 font-semibold">Critical (Risk &gt; 90)</span>
+                            
+                            <div className="hidden group-hover:block absolute left-0 bottom-full mb-2 w-72 p-3 bg-gray-900 border border-gray-600 rounded-md shadow-2xl z-50">
+                                <p className="text-rose-400 font-bold mb-1">CRITICAL ANOMALY</p>
+                                <p className="text-gray-300 leading-relaxed">
+                                    Physics: This orbit is "impossible" according to the model's learned rules. 
+                                    It likely indicates a major maneuver, a breakup event, or a sensor glitch.
+                                </p>
+                                <div className="absolute bottom-[-6px] left-4 w-3 h-3 bg-gray-900 border-r border-b border-gray-600 rotate-45"></div>
+                            </div>
+                        </div>
+
+                        {/* High - Interactive Tooltip */}
+                        <div className="group relative flex items-center gap-2 cursor-help">
+                            <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse shadow-[0_0_8px_rgba(249,115,22,0.8)]"></span> 
+                            <span className="text-orange-400 font-semibold">High (Risk &gt; 70)</span>
+
+                            <div className="hidden group-hover:block absolute left-0 bottom-full mb-2 w-72 p-3 bg-gray-900 border border-gray-600 rounded-md shadow-2xl z-50">
+                                <p className="text-orange-400 font-bold mb-1">HIGH SEVERITY</p>
+                                <p className="text-gray-300 leading-relaxed">
+                                    Physics: This orbit is statistically unlikely. It deviates significantly from the "Station-Keeping" norm 
+                                    (e.g., drifting slightly faster than it should), but isn't completely chaotic.
+                                </p>
+                                <div className="absolute bottom-[-6px] left-4 w-3 h-3 bg-gray-900 border-r border-b border-gray-600 rotate-45"></div>
+                            </div>
+                        </div>
+
+                        {/* Moderate - Interactive Tooltip */}
+                        <div className="group relative flex items-center gap-2 cursor-help">
+                            <span className="w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(250,204,21,0.5)]"></span> 
+                            <span className="text-amber-400 font-semibold">Moderate (Risk &gt; 45)</span>
+
+                            <div className="hidden group-hover:block absolute left-0 bottom-full mb-2 w-72 p-3 bg-gray-900 border border-gray-600 rounded-md shadow-2xl z-50">
+                                <p className="text-amber-400 font-bold mb-1">MODERATE DEVIATION</p>
+                                <p className="text-gray-300 leading-relaxed">
+                                    Physics: Detectable deviation from nominal variance. Likely represents minor station-keeping drift 
+                                    or gravitational perturbations not fully accounted for.
+                                </p>
+                                <div className="absolute bottom-[-6px] left-4 w-3 h-3 bg-gray-900 border-r border-b border-gray-600 rotate-45"></div>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 border-t border-gray-700 pt-2 mt-1">
+                            <span className="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]"></span> 
+                            <span className="text-cyan-400">Selected Asset</span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

@@ -1,0 +1,5 @@
+{
+  "name": "Copy of OrbitWatch",
+  "description": "An advanced AI platform for Space Domain Awareness (SDA). OrbitWatch simulates the real-time detection, tracking, and threat assessment of Resident Space Objects (RSOs) exhibiting cyber-suspicious indicators.",
+  "requestFramePermissions": []
+}

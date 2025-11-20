@@ -15,48 +15,7 @@ For a deep dive into the mathematics and engineering, please read the [Technical
 
 OrbitWatch has migrated from a traditional Client-Server model to a **Thick Client** architecture. This ensures zero latency in orbital propagation and protects data privacy by running machine learning inference directly within the user's browser sandbox.
 
-```text
-                                       INTERNET / EXTERNAL API
-                                     +---------------------------+
-                                     |    Space-Track.org API    |
-                                     |  (Auth & TLE Query Endpoint)|
-                                     +-------------+-------------+
-                                                   ^
-                                                   | HTTPS / JSON (or Fallback Snapshot)
-                                                   |
-         CLIENT-SIDE BROWSER SANDBOX               v
-+--------------------------------------------------+-----------------+
-|                                                                    |
-|   +-----------------+        +---------------------------------+   |
-|   | SpaceTrackLogin |------->| services/satelliteData.ts       |   |
-|   +-----------------+        | (CORS Handler / Fallback Logic) |   |
-|                              +---------------+-----------------+   |
-|                                              |                     |
-|                                              | Raw TLEs            |
-|                                              v                     |
-|                              +---------------------------------+   |
-|                              | services/tensorFlowService.ts   |   |
-|                              | 1. Vectorization (6 Features)   |   |
-|                              | 2. Normalization (Z-Score)      |   |
-|                              | 3. Model.fit() (30 Epochs)      |   |
-|                              | 4. Inference (MSE Score)        |   |
-|                              +---------------+-----------------+   |
-|                                              |                     |
-|                                              | Risk Scores         |
-|                                              v                     |
-|   +--------------------+     +---------------------------------+   |
-|   |   SGP4 Propagator  |---->|          Global State           |   |
-|   |   (satellite.js)   |     |      (React App Context)        |   |
-|   +--------------------+     +-------+---------------+---------+   |
-|                                      |               |             |
-|                                      v               v             |
-|                            +------------------+  +---------------+ |
-|                            |  3D Visualization|  |  Dashboard &  | |
-|                            | (react-globe.gl) |  |  Detail Views | |
-|                            +------------------+  +---------------+ |
-|                                                                    |
-+--------------------------------------------------------------------+
-```
+![System Architecture](https://imgur.com/cu6xW8n)
 
 ---
 

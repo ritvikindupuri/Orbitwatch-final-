@@ -1,3 +1,4 @@
+
 # OrbitWatch: AI-Powered Space Domain Awareness (SDA) Platform
 
 ![Status](https://img.shields.io/badge/Status-Operational-green)
@@ -34,7 +35,7 @@ OrbitWatch has migrated from a traditional Client-Server model to a **Thick Clie
 The diagram below illustrates the complete component interaction model. Note how the **Browser Runtime** encapsulates the entire logic stack—including the Physics Engine (SGP4) and the AI Inference Engine (TensorFlow.js)—isolating it from external network dependencies after the initial data fetch.
 
 <p align="center">
-  <img src="https://i.imgur.com/cu6xW8n.png" alt="System Architecture" width="800" />
+  <img src="https://i.imgur.com/cu6xW8n.png" alt="System Architecture" width="500" />
   <br>
   <b>Figure 1: High-Level System Architecture & Client-Side Sandbox Boundary</b>
 </p>
@@ -91,7 +92,7 @@ To ensure the model is production-grade and robust against overfitting:
 *   **Inference:** Provides the `generateAnomalyAnalysis()` function. It standardizes inputs using the mean/variance calculated during training to ensure statistical validity.
 
 ### `components/MapDisplay.tsx` (The Visualization)
-*   **Engine:** Uses `react-globe.gl` (Three.js wrapper).
+*   **Engine:** `react-globe.gl` (Three.js wrapper).
 *   **Rendering:** Renders thousands of objects using instanced mesh rendering for 60FPS performance.
 *   **Physics Integration:** Calls `satellite.js` 60 times per second to update the position of every dot based on the current millisecond.
 *   **Visuals:** Implements Bump Maps (Topology) and Specular Maps (Water reflection) for photorealism.
@@ -115,7 +116,7 @@ The application prioritizes real data but is built to be resilient against brows
 The diagram below details the ingestion lifecycle. It visualizes the path from User Credentials to Space-Track Authentication. Crucially, it depicts the **CORS Fallback Mechanism**, where the system intelligently switches to a cached real-world snapshot if browser security policies block the direct API connection. This ensures that the TensorFlow model *always* receives valid physics data for training, regardless of network conditions.
 
 <p align="center">
-  <img src="https://i.imgur.com/ceADblA.png" alt="Data Flow" width="800" />
+  <img src="https://i.imgur.com/ceADblA.png" alt="Data Flow" width="500" />
   <br>
   <b>Figure 2: Ingestion Logic & CORS Fallback Mechanism</b>
 </p>
@@ -168,6 +169,3 @@ OrbitWatch demonstrates a high level of proficiency in modern frontend engineeri
 4.  **Visual Fidelity:** Utilizing WebGL for cinema-grade visualization of complex datasets.
 
 This project serves as a proof-of-concept for next-generation Space Domain Awareness tools that leverage the full power of the modern web platform.
-
-**Lead Engineer**
-*OrbitWatch Development Team*

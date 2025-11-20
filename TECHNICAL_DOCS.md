@@ -53,7 +53,7 @@ This ensures all inputs are centered around 0 with a variance of 1, allowing the
 ### 3.3 Model Architecture
 
 <p align="center">
-  <img src="https://i.imgur.com/JjEf0lv.png" alt="Deep Autoencoder Architecture" width="800" />
+  <img src="https://i.imgur.com/JjEf0lv.png" alt="Deep Autoencoder Architecture" width="500" />
   <br>
   <b>Figure 3: Deep Autoencoder Topology & Node Breakdown</b>
 </p>

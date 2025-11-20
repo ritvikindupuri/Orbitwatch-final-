@@ -16,39 +16,46 @@ For a deep dive into the mathematics and engineering, please read the [Technical
 OrbitWatch has migrated from a traditional Client-Server model to a **Thick Client** architecture. This ensures zero latency in orbital propagation and protects data privacy by running machine learning inference directly within the user's browser sandbox.
 
 ```text
-+------------------+       +------------------------+
-|    Operator      |       |   Space-Track.org API  |
-+--------+---------+       +-----------+------------+
-         | Credentials                 |
-         v                             v
-+--------+---------+       +-----------+------------+
-| SpaceTrackLogin  +------>|  fetchSpaceTrackCatalog|
-|   (Component)    |       |   (Data Service)       |
-+--------+---------+       +-----------+------------+
-         |                             |
-         | (Auth Success)              | (Raw TLE Data)
-         v                             v
-+-------------------------------------------------------+
-|             BROWSER RUNTIME (CLIENT-SIDE)             |
-|                                                       |
-|  +-------------------+      +----------------------+  |
-|  |  SGP4 Propagator  |      |  TensorFlow Trainer  |  |
-|  |   (satellite.js)  |      |   (@tensorflow/tfjs) |  |
-|  +---------+---------+      +----------+-----------+  |
-|            |                           |              |
-|            | (XYZ Vectors)             | (Weights)    |
-|            v                           v              |
-|  +---------+---------+      +----------+-----------+  |
-|  | 3D Visualization  |      |   Deep Autoencoder   |  |
-|  | (react-globe.gl)  |<---->|   (Inference Engine) |  |
-|  +---------+---------+      +----------+-----------+  |
-|            |                           |              |
-|            | (Interaction)             | (Risk Score) |
-|            v                           v              |
-|  +---------+---------+      +----------+-----------+  |
-|  |   Detail View     |<-----|   Threat Assessment  |  |
-|  +-------------------+      +----------------------+  |
-+-------------------------------------------------------+
+                                       INTERNET / EXTERNAL API
+                                     +---------------------------+
+                                     |    Space-Track.org API    |
+                                     |  (Auth & TLE Query Endpoint)|
+                                     +-------------+-------------+
+                                                   ^
+                                                   | HTTPS / JSON (or Fallback Snapshot)
+                                                   |
+         CLIENT-SIDE BROWSER SANDBOX               v
++--------------------------------------------------+-----------------+
+|                                                                    |
+|   +-----------------+        +---------------------------------+   |
+|   | SpaceTrackLogin |------->| services/satelliteData.ts       |   |
+|   +-----------------+        | (CORS Handler / Fallback Logic) |   |
+|                              +---------------+-----------------+   |
+|                                              |                     |
+|                                              | Raw TLEs            |
+|                                              v                     |
+|                              +---------------------------------+   |
+|                              | services/tensorFlowService.ts   |   |
+|                              | 1. Vectorization (6 Features)   |   |
+|                              | 2. Normalization (Z-Score)      |   |
+|                              | 3. Model.fit() (30 Epochs)      |   |
+|                              | 4. Inference (MSE Score)        |   |
+|                              +---------------+-----------------+   |
+|                                              |                     |
+|                                              | Risk Scores         |
+|                                              v                     |
+|   +--------------------+     +---------------------------------+   |
+|   |   SGP4 Propagator  |---->|          Global State           |   |
+|   |   (satellite.js)   |     |      (React App Context)        |   |
+|   +--------------------+     +-------+---------------+---------+   |
+|                                      |               |             |
+|                                      v               v             |
+|                            +------------------+  +---------------+ |
+|                            |  3D Visualization|  |  Dashboard &  | |
+|                            | (react-globe.gl) |  |  Detail Views | |
+|                            +------------------+  +---------------+ |
+|                                                                    |
++--------------------------------------------------------------------+
 ```
 
 ---
@@ -82,6 +89,12 @@ $$ Risk = MeanSquaredError(Input - Output) \times ScalingFactor $$
 
 *   If a satellite follows standard Keplerian physics (learned during training), the reconstruction error is near 0.
 *   If a satellite performs an unannounced maneuver or drifts (station-keeping error), the error spikes.
+
+### 4. Training Strategy & Robustness
+To ensure the model is production-grade and robust against overfitting:
+*   **Regime Mixing:** The ingestion pipeline fetches both **LEO** (Low Earth Orbit) and **GEO** (Geostationary) datasets. This forces the model to learn a generalized representation of orbital mechanics rather than overfitting to the high speed of LEO objects.
+*   **Information Bottleneck:** By compressing 6 input features into a 3-neuron latent space, we mathematically force the model to discard noise and retain only the core physical correlations.
+*   **Early Stopping:** Training is capped at 30 epochs to prevent the network from memorizing specific TLE sets (overfitting to the snapshot).
 
 ---
 

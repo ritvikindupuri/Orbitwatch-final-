@@ -1,5 +1,6 @@
 
-# OrbitWatch: Technical Reference Manual
+# OrbitWatch: Technical Documentation
+by: Ritvik Induprui
 
 ## 1. Executive Summary
 

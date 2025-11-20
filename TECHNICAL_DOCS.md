@@ -147,14 +147,27 @@ The app attempts to connect to `https://www.space-track.org/ajaxauth/login`.
 
 ## 5. Orbital Physics Engine
 
-We utilize **SGP4 (Simplified General Perturbations 4)**, the NASA/NORAD standard for propagating satellite orbits.
+We utilize **SGP4 (Simplified General Perturbations 4)**, the NASA/NORAD standard for propagating satellite orbits. This mathematical model accounts for the Earth's oblateness (J2 perturbation), atmospheric drag, and lunar/solar gravity effects to predict a satellite's position/velocity from a TLE.
 
-### 5.1 Real-Time Historical Reconstruction
-In `AnomalyDetailView.tsx`, we generate the "Orbital History" charts. Since the application is client-side and stateless regarding long-term history, we **mathematically reconstruct** the past 24 hours using a **Moving Window** strategy.
+### 5.1 Real-Time Historical Reconstruction (The "Moving Window" Strategy)
+One of the unique challenges of a client-side application is the lack of a persistent database storing weeks of historical telemetry. To visualize trends (like the Altitude and Velocity charts in `AnomalyDetailView.tsx`), we employ a technique called **Reverse-Time Propagation**.
 
-*   **Trigger:** A `setInterval` hook fires every 5 seconds, updating the reference `now` timestamp.
-*   **Process:** The SGP4 propagator runs in a loop, calculating positions for `t = now`, `t = now - 15m`, `t = now - 30m`, etc., for 96 steps.
-*   **Result:** The charts (Altitude/Velocity) shift dynamically in real-time, simulating a live data stream filling the buffer, even though the data is derived from the physics engine on the fly.
+#### Construction Logic
+Instead of querying a database for past rows, we query the **Physics Engine**. When the view loads:
+1.  **Anchor Point:** We establish `t0 = Current System Time`.
+2.  **Iteration:** We execute a backward-looking loop that iterates **96 times** (representing the past 24 hours in 15-minute intervals).
+3.  **Propagation:** For each step $i$:
+    *   Calculate target time $t = t0 - (i \times 15 \text{ minutes})$.
+    *   Invoke `satellite.propagate(satrec, t)` to get the ECI (Earth-Centered Inertial) position vector ($x, y, z$) and velocity vector ($\dot{x}, \dot{y}, \dot{z}$).
+4.  **Transformation:** Convert ECI coordinates to **Geodetic** coordinates (Latitude, Longitude, Altitude) using Greenwich Mean Sidereal Time (GMST).
+5.  **Scalar Derivation:** Calculate scalar Velocity magnitude ($v = \sqrt{\dot{x}^2 + \dot{y}^2 + \dot{z}^2}$).
+
+#### Real-Time Update Mechanism
+To make the charts "Live" rather than static snapshots:
+*   **Trigger:** A React `useEffect` hook sets an interval timer (e.g., every 5 seconds).
+*   **State Mutation:** This timer updates a `now` state variable.
+*   **Re-Calculation:** This state change triggers a `useMemo` dependency invalidation. The entire 96-step physics loop runs again instantly (taking < 2ms on modern CPUs).
+*   **Visual Result:** The graph data array shifts forward. The oldest data point drops off, and a new "current" data point is added at the front. To the user, the graph appears to "crawl" forward in real-time, simulating a live data stream filling a buffer.
 
 ---
 

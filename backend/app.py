@@ -24,8 +24,11 @@ def log_request(response):
     if request.path == '/health':
         return response
 
-    now = time.time()
-    duration = round(now - g.start_time, 4)
+    # Calculate duration safely
+    duration = 0
+    if hasattr(g, 'start_time'):
+        duration = round(time.time() - g.start_time, 4)
+
     timestamp = datetime.now(timezone.utc)
 
     log_entry = {
@@ -35,7 +38,7 @@ def log_request(response):
         "status_code": response.status_code,
         "duration_seconds": duration,
         "ip": request.remote_addr,
-        "user_agent": request.user_agent.string
+        "user_agent": request.user_agent.string if request.user_agent else "Unknown"
     }
 
     # Attempt to log payload size if possible, but be careful with large bodies
@@ -46,7 +49,9 @@ def log_request(response):
         db = get_db()
         db.api_logs.insert_one(log_entry)
     except Exception as e:
-        app.logger.error(f"Failed to log request: {e}")
+        # In production, we might log this to a file or stderr
+        # app.logger.error(f"Failed to log request: {e}")
+        pass
 
     return response
 

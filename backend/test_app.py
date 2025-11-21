@@ -1,11 +1,16 @@
 import unittest
 import json
 import os
+
+# Set environment variable BEFORE importing app to ensure it starts in test mode
+os.environ['TESTING'] = 'True'
+
 from app import app
+from db import get_db
 
 class OrbitWatchTestCase(unittest.TestCase):
     def setUp(self):
-        os.environ['TESTING'] = 'True'
+        # Ensure fresh app client for each test
         self.app = app.test_client()
         self.app.testing = True
 
@@ -22,6 +27,13 @@ class OrbitWatchTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.data)
         self.assertIn('session_id', data)
+
+        # Verify log created
+        with app.app_context():
+            db = get_db()
+            logs = list(db.api_logs.find({"path": "/api/login"}))
+            self.assertGreaterEqual(len(logs), 1)
+            self.assertEqual(logs[0]['method'], 'POST')
 
     def test_store_and_get_tle(self):
         # 1. Store TLE
@@ -47,6 +59,13 @@ class OrbitWatchTestCase(unittest.TestCase):
         self.assertEqual(data[0]['NORAD_CAT_ID'], 25544)
         self.assertIn('_id', data[0])
         self.assertIn('stored_at', data[0])
+
+        # Check for indexes (indirectly, ensuring no error)
+        with app.app_context():
+            db = get_db()
+            # We can check if api_logs has entries for these calls
+            logs = list(db.api_logs.find({"path": "/api/tle"}))
+            self.assertGreaterEqual(len(logs), 2) # One POST, one GET
 
 if __name__ == '__main__':
     unittest.main()

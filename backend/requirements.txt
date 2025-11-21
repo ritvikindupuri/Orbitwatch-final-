@@ -6,3 +6,5 @@ numpy
 pandas
 scikit-learn
 tensorflow
+pymongo
+mongomock

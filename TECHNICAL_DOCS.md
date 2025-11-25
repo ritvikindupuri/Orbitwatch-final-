@@ -31,7 +31,7 @@ The application follows a linear state initialization followed by a cyclic analy
 *   **Core Framework:** React 19 (Vite Build System)
 *   **Machine Learning:** TensorFlow.js (WebGL Backend)
 *   **Orbital Physics:** `satellite.js` (SGP4/SDP4 implementation)
-*   **Visualization:** `react-globe.gl` (Three.js wrapper)
+*   **Visualization:** `react-map-gl` (Mapbox GL JS)
 *   **Styling:** Tailwind CSS
 
 ---
@@ -124,26 +124,23 @@ The Risk Score is **not simulated**. It is a direct result of a mathematical ope
 5.  **Display:** We scale that raw error number to fit a 0-100 scale for the progress bar.
     $$ Score = \min(100, MSE \times 500) $$
 
-### 3.6 Prevention of Overfitting & GEO Specialization
-To ensure the system provides high-fidelity station-keeping analysis, we employ a **GEO-Centric** training strategy.
+### 3.6 Data Sufficiency & Training Strategy
+A critical architectural question is: **"Why is a snapshot of 100 satellites sufficient to detect anomalies?"**
 
-1.  **Small Dataset Sufficiency:**
-    Since the model is an Autoencoder (Unsupervised Learning), it does not need millions of labeled examples. It simply needs enough examples of "normal" GEO physics to learn the mathematical curve of a stable orbit.
+#### 1. The Strategy: GEO-Centric Specialization
+The model is specifically trained on the top **100 Objects** in the Geostationary Belt (filtered by `Mean Motion 0.99--1.01` and `Eccentricity < 0.01`).
+By narrowing the scope to this specific regime, we allow the Autoencoder to "over-fit" to the physics of perfectly stationary satellites. This makes it hyper-sensitive to minute deviations.
 
-2.  **GEO Specialization:**
-    The ingestion pipeline is configured to fetch **only** objects in the Geostationary Belt (Mean Motion 0.99--1.01), typically limiting the training set to the top **100** assets. By training the Autoencoder specifically on this regime, we effectively "over-fit" the model to the physics of perfectly stationary satellites. This makes the system **hyper-sensitive** to anomalies: even minute drift or unannounced inclination maneuvers will cause the reconstruction error to spike, flagging the object immediately.
+#### 2. Spatial vs. Temporal Analysis (The "Platoon Analogy")
+There are two ways to detect an anomaly:
+*   **Temporal (Time-Based):** Watching one satellite for a week to see if it drifts. This requires a massive historical database.
+*   **Spatial (Population-Based):** Comparing one satellite against the "Standard Behavior" of its 99 peers *right now*.
+    *   *Analogy:* To tell if a soldier is marching out of step, you don't need to know where they walked yesterday. You just need to look at the rest of the platoon in that moment.
+    *   **Conclusion:** Our 100-satellite snapshot provides a statistically significant "Platoon" to define the baseline manifold. If 99 satellites are stationary and 1 is drifting, the Autoencoder (trained on the 99) will fail to reconstruct the 1, flagging it as an anomaly immediately. This allows for powerful detection without historical data overhead.
 
-3.  **The Information Bottleneck:**
-    As visualized in Figure 1, the 3-neuron bottleneck (50% compression) mathematically forces the model to discard noise. It acts as a structural regularizer.
-
-4.  **Strict Epoch Limiting:**
-    We train for exactly **30 Epochs**. In experimentation, convergence typically happens around epoch 20. Training for 1000+ epochs would allow the weights to adjust to the specific floating-point quirks of the Space-Track TLE snapshot.
-
-### 3.7 Spatial vs. Temporal Analysis Strategy
-A common question is whether a snapshot of 100 satellites is sufficient compared to a historical database.
-
-*   **Spatial Analysis (Current):** The current Autoencoder performs **Population-Based Anomaly Detection**. It compares a satellite against its peers in the current moment. This is highly effective for detecting immediate physics violations, regime outliers, and station-keeping errors relative to the "Fleet Norm". A snapshot of 100 objects provides a statistically significant population to define this manifold.
-*   **Temporal Analysis (Future):** To detect gradual degradation (e.g., component fatigue over 6 months), **Time-Series** data is required. This necessitates a backend database and LSTM (Long Short-Term Memory) models, which is outlined in **Phase 3** of the roadmap.
+#### 3. Prevention of Overfitting
+*   **Information Bottleneck:** The 3-neuron latent layer physically prevents the model from memorizing the noise of 100 satellites. It *must* learn the general rules to pass information through.
+*   **Epoch Limiting:** We strictly limit training to 30 Epochs. This stops the model before it can begin to memorize specific TLE floating-point idiosyncrasies.
 
 ---
 
@@ -159,13 +156,12 @@ The app attempts to connect to `https://www.space-track.org/ajaxauth/login`.
 
 ### 4.2 The CORS Fallback Mechanism
 **Problem:** Space-Track.org does not set `Access-Control-Allow-Origin` headers for localhost requests.
-**Solution:** The service catches the `Failed to fetch` error. If detected, it automatically loads `FALLBACK_TLE_SNAPSHOT`—a hardcoded constant containing real TLE strings for **8 curated GEO satellites** (GOES-13, INTELSAT 901, GALAXY 15, etc.). This ensures the app is always demonstrable and the ML model always has real physics data to train on, even without a proxy server.
+**Solution:** The service catches the `Failed to fetch` error. If detected, it throws a visible error to the user interface rather than failing silently. Note: Previous versions included a fallback snapshot, but strictly enforcing API connectivity ensures data integrity.
 
 ### 4.3 Data Accuracy & Freshness
 The application operates on strict, real-world orbital elements.
 *   **Live Mode:** Data is 100% accurate to the second, fetched directly from the Space-Track catalog.
-*   **Fallback Mode:** Data relies on a static snapshot (Epoch: **2025-01-23**).
-    *   *SGP4 Propagation:* The physics engine projects this data forward to the current system time. For days or weeks, this projection is highly accurate. Over months, unmodelled maneuvers will cause the projected position to drift from the actual physical object.
+*   **Epoch Validity:** The SGP4 engine projects the satellite's position based on the TLE's Epoch. For stable GEO satellites, a TLE remains valid for days.
 
 ---
 
@@ -214,9 +210,11 @@ The root orchestrator.
 *   **Analysis Loop:** A `useEffect` hook runs every 7 seconds. It selects a random satellite from the catalog and passes it to `generateAnomalyAnalysis()`.
 
 ### 6.2 `MapDisplay.tsx` (3D Visualization)
-*   **Engine:** `react-globe.gl`.
-*   **Ripple Visualization:** Instead of "beams", anomalies are rendered as **pulsating 2D rings** (`ringsData`) on the surface of the globe. The color of the ring corresponds to the Risk Level (Red/Orange/Yellow).
-*   **User Interaction:** The `onRingClick` handler allows users to click directly on a pulsating ripple to select the anomaly, passing the ID up to the parent orchestrator.
+*   **Engine:** `react-map-gl` (Mapbox GL JS).
+*   **Hybrid Rendering:**
+    *   **Standard Assets:** Rendered via a highly performant `circle` layer (WebGL).
+    *   **Anomalies:** Rendered as DOM-based `Marker` components. This allows for CSS-based animations (pulsating rings) which are difficult to achieve inside the WebGL canvas.
+*   **User Interaction:** The `onLayerClick` handler allows users to click directly on a satellite dot to select the anomaly, passing the ID up to the parent orchestrator.
 
 ### 6.3 `DashboardPanel.tsx` (Control Interface)
 *   **Debounced Filtering:** The search input utilizes a **300ms debounce**. This ensures that the filtering logic (which matches against Name, NORAD ID, Risk Level, Country, and Type) only runs once the user stops typing, preventing UI lag during rapid input.
@@ -254,7 +252,7 @@ This section traces the exact flow of data from user input to visual alert.
 
 3.  **Steady State:**
     *   User sees the 3D Globe (`MapDisplay`).
-    *   Every 60ms, `MapDisplay` calculates new X/Y/Z positions for all dots.
+    *   Every 60ms, Mapbox GL updates the viewport.
 
 4.  **Anomaly Detection Event:**
     *   Every 7 seconds, the `App.tsx` loop picks a random satellite.
@@ -269,7 +267,35 @@ This section traces the exact flow of data from user input to visual alert.
 
 ---
 
-## 8. Conclusion & Future Roadmap
+## 8. Database Architecture (Supabase/PostgreSQL)
+
+While the current OrbitWatch implementation is stateless (Architecture V1), production deployments require persistence. The recommended database solution is **Supabase (PostgreSQL)** due to its native handling of Time-Series data and Real-Time subscriptions.
+
+### 8.1 Schema Design
+The data model is designed to support the transition from Spatial (Snapshot) analysis to Temporal (Historical) analysis.
+
+*   **`satellites` Table:**
+    *   Acts as the "Asset Inventory."
+    *   Stores NORAD ID, Name, Launch Date, and Owner.
+*   **`orbital_data` Table (Time-Series):**
+    *   **Purpose:** This is the most critical table for Phase 3 (LSTM).
+    *   **Function:** Instead of overwriting the TLE when it updates, we append a new row with a `timestamp`.
+    *   **ML Usage:** The LSTM model will query this table: `SELECT * FROM orbital_data WHERE satellite_id = 12345 ORDER BY epoch ASC`.
+*   **`anomalies` Table:**
+    *   Persists the ML Risk Scores generated by the Client-Side engine.
+    *   Enables historical reporting on threat trends.
+
+### 8.2 Session Management & Auth (NoSQL Capability via JSONB)
+We deliberately **avoid** using a separate MongoDB instance for session tracking to prevent "Polyglot Persistence" complexity. PostgreSQL provides a robust **JSONB** column type that allows document-style storage within a relational schema.
+
+*   **`user_profiles` Table:**
+    *   Stores user identity via Supabase Auth.
+    *   **`session_state` (JSONB):** Stores unstructured preferences such as active filters, last camera position (Lat/Lng/Alt), and UI theme settings.
+    *   *Advantage:* Keeps the entire stack unified (SQL) while providing the flexibility of a NoSQL document store for transient user data.
+
+---
+
+## 9. Conclusion & Future Roadmap
 
 OrbitWatch has successfully validated the efficacy of "Thick Client" architectures for mission-critical space operations. The implementation demonstrates that:
 1.  **Unsupervised Learning** is effective for detecting novel anomalies without labeled failure datasets.
@@ -290,31 +316,3 @@ To evolve from a Technical Proof-of-Concept (PoC) to a production-ready SpOC too
 *   **Phase 4: Federated Learning**
     *   *Objective:* Implement a distributed training protocol.
     *   *Benefit:* Allow individual operator nodes to train on local data and share weight updates without ever sharing the underlying classified orbital parameters or catalog data.
-
----
-
-## 9. Database Architecture (Supabase/PostgreSQL)
-
-While the current OrbitWatch implementation is stateless (Architecture V1), production deployments require persistence. The recommended database solution is **Supabase (PostgreSQL)** due to its native handling of Time-Series data and Real-Time subscriptions.
-
-### 9.1 Schema Design
-The data model is designed to support the transition from Spatial (Snapshot) analysis to Temporal (Historical) analysis.
-
-*   **`satellites` Table:**
-    *   Acts as the "Asset Inventory."
-    *   Stores NORAD ID, Name, Launch Date, and Owner.
-*   **`orbital_data` Table (Time-Series):**
-    *   **Purpose:** This is the most critical table for Phase 3 (LSTM).
-    *   **Function:** Instead of overwriting the TLE when it updates, we append a new row with a `timestamp`.
-    *   **ML Usage:** The LSTM model will query this table: `SELECT * FROM orbital_data WHERE satellite_id = 12345 ORDER BY epoch ASC`.
-*   **`anomalies` Table:**
-    *   Persists the ML Risk Scores generated by the Client-Side engine.
-    *   Enables historical reporting on threat trends.
-
-### 9.2 Session Management & Auth (NoSQL Capability via JSONB)
-We deliberately **avoid** using a separate MongoDB instance for session tracking to prevent "Polyglot Persistence" complexity. PostgreSQL provides a robust **JSONB** column type that allows document-style storage within a relational schema.
-
-*   **`user_profiles` Table:**
-    *   Stores user identity via Supabase Auth.
-    *   **`session_state` (JSONB):** Stores unstructured preferences such as active filters, last camera position (Lat/Lng/Alt), and UI theme settings.
-    *   *Advantage:* Keeps the entire stack unified (SQL) while providing the flexibility of a NoSQL document store for transient user data.

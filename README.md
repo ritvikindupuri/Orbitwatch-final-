@@ -16,7 +16,7 @@ OrbitWatch utilizes a modern, "Thick Client" stack to deliver high-performance p
 | **Frontend Core** | **React 19 (Vite)** | Component lifecycle, State management, HMR. |
 | **Machine Learning** | **TensorFlow.js** | Runs the Deep Autoencoder model on the GPU via WebGL. |
 | **Orbital Physics** | **Satellite.js** | SGP4/SDP4 propagation algorithms for real-time tracking. |
-| **Visualization** | **React-Globe.gl** | High-performance 3D rendering wrapper for Three.js. |
+| **Visualization** | **React-Map-GL** | High-performance Mapbox GL JS wrapper for 3D rendering. |
 | **Styling** | **Tailwind CSS** | Utility-first styling for the mission-control aesthetic. |
 | **Data Source** | **Space-Track.org** | Real-world TLE (Two-Line Element) catalog data. |
 
@@ -43,7 +43,8 @@ Unlike rule-based systems, OrbitWatch uses **Unsupervised Learning**. We do not 
 
 **Key Strategies:**
 1.  **Deep Autoencoder:** We utilize a sequential neural network to learn the manifold of Keplerian physics.
-2.  **GEO-Centric Specialization:** The model training is constrained to the top **100 objects** in the Geostationary Belt. By specifically learning the physics of "perfectly stationary" satellites (Mean Motion ~1.0), the model becomes hyper-sensitive to minute drift anomalies or station-keeping errors in high-value assets.
+2.  **GEO-Centric Specialization (100 Satellites):** The model is trained on a live dataset of the top **100 Objects** in the Geostationary Belt.
+    *   *Why 100?* For **Spatial Analysis** (Population-Based Anomaly Detection), a snapshot of 100 synchronized satellites is statistically sufficient to define the "Normal Manifold." If 99 satellites are stationary and 1 is drifting, the model detects the outlier without needing months of historical data. (See *Technical Docs Section 3.6* for full mathematical justification).
 3.  **Information Bottleneck:** A 3-neuron latent space forces the model to learn structural correlations rather than memorizing noise.
 
 ---
@@ -53,12 +54,12 @@ Unlike rule-based systems, OrbitWatch uses **Unsupervised Learning**. We do not 
 The application prioritizes real data but is built to be resilient against browser security restrictions.
 
 ### Logic Flowchart
-The diagram below details the ingestion lifecycle. It visualizes the path from User Credentials to Space-Track Authentication. Crucially, it depicts the **CORS Fallback Mechanism**, where the system intelligently switches to a cached real-world snapshot if browser security policies block the direct API connection. This ensures that the TensorFlow model *always* receives valid physics data for training, regardless of network conditions.
+The diagram below details the ingestion lifecycle. It visualizes the path from User Credentials to Space-Track Authentication.
 
 <p align="center">
   <img src="https://i.imgur.com/ceADblA.png" alt="Data Flow" width="400" />
   <br>
-  <b>Figure 2: Ingestion Logic & CORS Fallback Mechanism</b>
+  <b>Figure 2: Ingestion Logic & CORS Mechanism</b>
 </p>
 
 ---
@@ -70,7 +71,7 @@ While OrbitWatch operates as a stateless client-side application by default (Arc
 *   **Schema Location:** `database/schema.sql`
 *   **Architecture:** Designed for **Supabase (PostgreSQL)** to leverage built-in Real-Time subscriptions and Vector Search capabilities.
 *   **Capabilities:** Enables long-term TLE storage for Temporal Analysis (Phase 3 LSTM models) and multi-user operator annotation sync.
-*   **Documentation:** See **Section 9** of the [Technical Documentation](TECHNICAL_DOCS.md) for the complete schema design and integration strategy.
+*   **Documentation:** See **Section 8** of the [Technical Documentation](TECHNICAL_DOCS.md) for the complete schema design and integration strategy.
 
 ---
 
@@ -89,7 +90,7 @@ While OrbitWatch operates as a stateless client-side application by default (Arc
     ```
 
 2.  **Install Dependencies**
-    This installs React, Three.js, TensorFlow.js, and Satellite.js.
+    This installs React, Mapbox GL, TensorFlow.js, and Satellite.js.
     ```bash
     npm install
     ```
@@ -104,8 +105,8 @@ While OrbitWatch operates as a stateless client-side application by default (Arc
     Open `http://localhost:5173` in your browser.
 
 5.  **Login**
-    *   **Option A (Real Data):** Enter valid Space-Track.org credentials. (Note: This may require disabling CORS in your browser for development).
-    *   **Option B (Demo/Fallback):** Enter any dummy credentials (e.g., `admin`/`password`). The system will detect the network block and automatically load the cached real-world dataset so you can explore the features immediately.
+    *   **Credentials:** Enter valid Space-Track.org credentials.
+    *   **Mapbox:** The app will request a Mapbox Public Token for the 3D visualization layer.
 
 ---
 

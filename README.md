@@ -76,7 +76,7 @@ OrbitWatch integrates with **MongoDB** for robust data persistence. This allows 
     *   `tle_data`: Stores historical Two-Line Element sets for temporal analysis.
     *   `sessions`: Manages user login sessions.
     *   `api_logs`: Tracks all API requests for auditing and performance monitoring.
-*   **Documentation:** See **Section 9** of the [Technical Documentation](TECHNICAL_DOCS.md) for the complete schema design and integration strategy.
+*   **Documentation:** See **Section 8** of the [Technical Documentation](TECHNICAL_DOCS.md) for the complete schema design and integration strategy.
 
 ---
 

@@ -269,40 +269,16 @@ This section traces the exact flow of data from user input to visual alert.
 
 ---
 
-## 8. Conclusion & Future Roadmap
-
-OrbitWatch has successfully validated the efficacy of "Thick Client" architectures for mission-critical space operations. The implementation demonstrates that:
-1.  **Unsupervised Learning** is effective for detecting novel anomalies without labeled failure datasets.
-2.  **Client-Side Inference** via TensorFlow.js is performant enough for real-time analysis of thousands of objects.
-3.  **Cinema-Grade Visualization** can coexist with rigorous engineering tools in a web context.
-
-### Engineering Roadmap (Next Steps)
-To evolve from a Technical Proof-of-Concept (PoC) to a production-ready SpOC tool, the following milestones are proposed:
-
-*   **Phase 2: Rust & WebAssembly Migration**
-    *   *Objective:* Port the SGP4 propagation loop from JavaScript to Rust (compiled to Wasm).
-    *   *Benefit:* Increase particle simulation capacity from ~3,000 to 20,000+ objects at 60 FPS.
-
-*   **Phase 3: Temporal ML Models (LSTM)**
-    *   *Objective:* Replace the current dense Autoencoder with a Long Short-Term Memory (LSTM) Autoencoder.
-    *   *Benefit:* Allow the system to analyze time-series sequences of TLEs, enabling detection of gradual degradation trends (e.g., slowly failing thrusters) rather than just instantaneous state anomalies.
-
-*   **Phase 4: Federated Learning**
-    *   *Objective:* Implement a distributed training protocol.
-    *   *Benefit:* Allow individual operator nodes to train on local data and share weight updates without ever sharing the underlying classified orbital parameters or catalog data.
-
----
-
-## 9. Database Architecture (MongoDB)
+## 8. Database Architecture (MongoDB)
 
 OrbitWatch employs a NoSQL **MongoDB** database to handle data persistence, offering flexibility for the varying structures of satellite telemetry and operational logs.
 
-### 9.1 Implementation Details
+### 8.1 Implementation Details
 *   **Driver:** `pymongo` is used for database interactions.
 *   **Testing:** `mongomock` is utilized during testing (when `TESTING=True`) to simulate database operations without a running MongoDB instance.
 *   **Connection:** Managed via a global client singleton with connection pooling (`backend/db.py`).
 
-### 9.2 Collections & Schema
+### 8.2 Collections & Schema
 Although MongoDB is schema-less, the application enforces the following structure:
 
 #### `tle_data` (Historical Telemetry)
@@ -343,5 +319,29 @@ Provides a comprehensive audit trail of all backend API interactions.
     *   `timestamp` (DESC)
     *   `path` (ASC)
 
-### 9.3 Future Scaling Strategy
+### 8.3 Future Scaling Strategy
 The choice of MongoDB allows for horizontal scaling via **Sharding** if the TLE dataset grows into the Terabyte range (e.g., storing full history for the entire catalog). The `tle_data` collection is designed to be shardable on `NORAD_CAT_ID` or `stored_at` depending on the query patterns (Asset-Centric vs. Time-Centric analysis).
+
+---
+
+## 9. Conclusion & Future Roadmap
+
+OrbitWatch has successfully validated the efficacy of "Thick Client" architectures for mission-critical space operations. The implementation demonstrates that:
+1.  **Unsupervised Learning** is effective for detecting novel anomalies without labeled failure datasets.
+2.  **Client-Side Inference** via TensorFlow.js is performant enough for real-time analysis of thousands of objects.
+3.  **Cinema-Grade Visualization** can coexist with rigorous engineering tools in a web context.
+
+### Engineering Roadmap (Next Steps)
+To evolve from a Technical Proof-of-Concept (PoC) to a production-ready SpOC tool, the following milestones are proposed:
+
+*   **Phase 2: Rust & WebAssembly Migration**
+    *   *Objective:* Port the SGP4 propagation loop from JavaScript to Rust (compiled to Wasm).
+    *   *Benefit:* Increase particle simulation capacity from ~3,000 to 20,000+ objects at 60 FPS.
+
+*   **Phase 3: Temporal ML Models (LSTM)**
+    *   *Objective:* Replace the current dense Autoencoder with a Long Short-Term Memory (LSTM) Autoencoder.
+    *   *Benefit:* Allow the system to analyze time-series sequences of TLEs, enabling detection of gradual degradation trends (e.g., slowly failing thrusters) rather than just instantaneous state anomalies.
+
+*   **Phase 4: Federated Learning**
+    *   *Objective:* Implement a distributed training protocol.
+    *   *Benefit:* Allow individual operator nodes to train on local data and share weight updates without ever sharing the underlying classified orbital parameters or catalog data.

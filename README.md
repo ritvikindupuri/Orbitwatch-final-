@@ -19,12 +19,17 @@ OrbitWatch utilizes a modern, "Thick Client" stack to deliver high-performance p
 | **Visualization** | **React-Globe.gl** | High-performance 3D rendering wrapper for Three.js. |
 | **Styling** | **Tailwind CSS** | Utility-first styling for the mission-control aesthetic. |
 | **Data Source** | **Space-Track.org** | Real-world TLE (Two-Line Element) catalog data. |
+| **Database** | **MongoDB** | NoSQL database for flexible storage of TLE data, user sessions, and API logs. |
+| **Admin UI** | **Anvil Uplink** | Secure connection bridge for remote admin dashboards. |
 
 ---
 
 ## System Architecture
 
-OrbitWatch has migrated from a traditional Client-Server model to a **Thick Client** architecture. This ensures zero latency in orbital propagation and protects data privacy by running machine learning inference directly within the user's browser sandbox.
+OrbitWatch utilizes a hybrid **Thick Client** architecture supported by a lightweight **Flask Backend**.
+- **Frontend:** Handles orbital propagation and machine learning inference directly in the browser sandbox for zero latency and data privacy.
+- **Backend:** A Python Flask service manages data persistence, logging, and user sessions.
+
 
 ### Architectural Overview
 The diagram below illustrates the complete component interaction model. Note how the **Browser Runtime** encapsulates the entire logic stack—including the Physics Engine (SGP4) and the AI Inference Engine (TensorFlow.js)—isolating it from external network dependencies after the initial data fetch.
@@ -65,12 +70,19 @@ The diagram below details the ingestion lifecycle. It visualizes the path from U
 
 ## Data Persistence & Database
 
-While OrbitWatch operates as a stateless client-side application by default (Architecture V1), a production-ready **PostgreSQL Schema** is provided for teams requiring historical data persistence and collaborative features.
+OrbitWatch integrates with **MongoDB** for robust data persistence. This allows for the storage of historical orbital data, user sessions, and detailed API access logs.
 
-*   **Schema Location:** `database/schema.sql`
-*   **Architecture:** Designed for **Supabase (PostgreSQL)** to leverage built-in Real-Time subscriptions and Vector Search capabilities.
-*   **Capabilities:** Enables long-term TLE storage for Temporal Analysis (Phase 3 LSTM models) and multi-user operator annotation sync.
-*   **Documentation:** See **Section 9** of the [Technical Documentation](TECHNICAL_DOCS.md) for the complete schema design and integration strategy.
+*   **Implementation:** The backend uses `pymongo` for production connections and `mongomock` for testing environments.
+*   **Collections:**
+    *   `tle_data`: Stores historical Two-Line Element sets for temporal analysis.
+    *   `sessions`: Manages user login sessions.
+    *   `api_logs`: Tracks all API requests for auditing and performance monitoring.
+*   **Documentation:** See **Section 8** of the [Technical Documentation](TECHNICAL_DOCS.md) for the complete schema design and integration strategy.
+
+### Anvil Integration
+The backend includes an **Anvil Uplink** service, allowing you to build secure, remote web dashboards (using [Anvil.works](https://anvil.works)) that connect directly to your local OrbitWatch database.
+*   **Capabilities:** View logs, search satellite history, and monitor system health from the cloud.
+*   **Guide:** See [ANVIL_INTEGRATION.md](ANVIL_INTEGRATION.md) for setup instructions.
 
 ---
 

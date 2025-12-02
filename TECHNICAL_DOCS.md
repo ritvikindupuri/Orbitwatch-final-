@@ -269,7 +269,68 @@ This section traces the exact flow of data from user input to visual alert.
 
 ---
 
-## 8. Conclusion & Future Roadmap
+## 8. Database Architecture (MongoDB)
+
+OrbitWatch employs a NoSQL **MongoDB** database to handle data persistence, offering flexibility for the varying structures of satellite telemetry and operational logs.
+
+### 8.1 Implementation Details
+*   **Driver:** `pymongo` is used for database interactions.
+*   **Testing:** `mongomock` is utilized during testing (when `TESTING=True`) to simulate database operations without a running MongoDB instance.
+*   **Connection:** Managed via a global client singleton with connection pooling (`backend/db.py`).
+
+### 8.2 Collections & Schema
+Although MongoDB is schema-less, the application enforces the following structure:
+
+#### `tle_data` (Historical Telemetry)
+Stores TLE snapshots to support temporal analysis and historical playback.
+*   **Fields:**
+    *   `NORAD_CAT_ID` (Integer): Unique satellite identifier.
+    *   `TLE_LINE1` (String): First line of the Two-Line Element set.
+    *   `TLE_LINE2` (String): Second line of the Two-Line Element set.
+    *   `OBJECT_NAME` (String): Common name of the satellite.
+    *   `stored_at` (Date): Timestamp of ingestion.
+    *   `epoch` (String): The specific epoch of the TLE data.
+*   **Indexes:**
+    *   `NORAD_CAT_ID` (ASC)
+    *   `stored_at` (DESC)
+    *   `OBJECT_NAME` (ASC)
+
+#### `sessions` (User Management)
+Manages simple session states for user authentication.
+*   **Fields:**
+    *   `username` (String): The authenticated user's identifier.
+    *   `created_at` (Date): Session creation timestamp.
+    *   `active` (Boolean): Status of the session.
+*   **Indexes:**
+    *   `created_at` (DESC)
+
+#### `api_logs` (Observability)
+Provides a comprehensive audit trail of all backend API interactions.
+*   **Fields:**
+    *   `timestamp` (Date): Exact time of the request.
+    *   `method` (String): HTTP method (GET, POST, etc.).
+    *   `path` (String): Request endpoint.
+    *   `status_code` (Integer): HTTP response code.
+    *   `duration_seconds` (Float): Processing time.
+    *   `ip` (String): Client IP address.
+    *   `user_agent` (String): Client browser/tool signature.
+    *   `content_length` (Integer, Optional): Size of the request body.
+*   **Indexes:**
+    *   `timestamp` (DESC)
+    *   `path` (ASC)
+
+### 8.3 Future Scaling Strategy
+The choice of MongoDB allows for horizontal scaling via **Sharding** if the TLE dataset grows into the Terabyte range (e.g., storing full history for the entire catalog). The `tle_data` collection is designed to be shardable on `NORAD_CAT_ID` or `stored_at` depending on the query patterns (Asset-Centric vs. Time-Centric analysis).
+
+### 8.4 External Integrations (Anvil Uplink)
+OrbitWatch utilizes the **Anvil Uplink** protocol to facilitate secure, authenticated access to the local database from external web applications.
+*   **Architecture:** A standalone Python service (`backend/anvil_service.py`) initializes a secure WebSocket connection to the Anvil cloud.
+*   **Security:** Access is controlled via a server-side Uplink Key (`ANVIL_UPLINK_KEY`). The service exposes specific callable functions (`get_recent_tles`, `get_system_logs`) rather than exposing raw database access, ensuring the principle of least privilege.
+*   **Usage:** This allows operators to use low-code Anvil dashboards for administrative tasks without exposing the core backend ports to the public internet.
+
+---
+
+## 9. Conclusion & Future Roadmap
 
 OrbitWatch has successfully validated the efficacy of "Thick Client" architectures for mission-critical space operations. The implementation demonstrates that:
 1.  **Unsupervised Learning** is effective for detecting novel anomalies without labeled failure datasets.
@@ -290,29 +351,3 @@ To evolve from a Technical Proof-of-Concept (PoC) to a production-ready SpOC too
 *   **Phase 4: Federated Learning**
     *   *Objective:* Implement a distributed training protocol.
     *   *Benefit:* Allow individual operator nodes to train on local data and share weight updates without ever sharing the underlying classified orbital parameters or catalog data.
-
----
-
-## 9. Database Architecture (Supabase/PostgreSQL)
-
-While the current OrbitWatch implementation is stateless (Architecture V1), production deployments require persistence. The recommended database solution is **Supabase (PostgreSQL)** due to its native handling of Time-Series data and Real-Time subscriptions.
-
-### 9.1 Schema Design
-The data model is designed to support the transition from Spatial (Snapshot) analysis to Temporal (Historical) analysis.
-
-*   **`satellites` Table:**
-    *   Acts as the "Asset Inventory."
-    *   Stores NORAD ID, Name, Launch Date, and Owner.
-*   **`orbital_data` Table (Time-Series):**
-    *   **Purpose:** This is the most critical table for Phase 3 (LSTM).
-    *   **Function:** Instead of overwriting the TLE when it updates, we append a new row with a `timestamp`.
-    *   **ML Usage:** The LSTM model will query this table: `SELECT * FROM orbital_data WHERE satellite_id = 12345 ORDER BY epoch ASC`.
-*   **`anomalies` Table:**
-    *   Persists the ML Risk Scores generated by the Client-Side engine.
-    *   Enables historical reporting on threat trends.
-
-### 9.2 Real-Time Sync Strategy
-Supabase provides a `Realtime` engine over WebSockets.
-*   **Workflow:** When Operator A annotates an anomaly in `AnomalyDetailView`, the app inserts a row into `operator_notes`.
-*   **Propagation:** Supabase pushes this new row to all connected clients.
-*   **Result:** Operator B's dashboard updates instantly, enabling collaborative Mission Control capabilities without complex WebSocket backend code.

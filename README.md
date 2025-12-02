@@ -113,10 +113,6 @@ While OrbitWatch operates as a stateless client-side application by default (Arc
 
 To expose your local OrbitWatch calculations to a public web dashboard without deploying a full server, we utilize **Anvil Uplink**. This creates a secure tunnel between your local Python backend and the Anvil cloud.
 
-<p align="center">
-  <img src="https://anvil.works/docs/uplink/img/uplink-architecture.png" alt="Anvil Uplink Architecture" width="600" />
-</p>
-
 #### 1. Create the Anvil App
 1.  Navigate to [anvil.works](https://anvil.works) and create a free account.
 2.  Click **New Blank App** and select **Material Design**.

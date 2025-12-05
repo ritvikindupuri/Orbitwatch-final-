@@ -2,7 +2,7 @@
 
 **OrbitWatch** is a cutting-edge, client-side application designed to simulate the capabilities of a Space Operations Center (SpOC). It ingests real orbital telemetry (TLE data), visualizes assets on an interactive 3D globe, and employs a browser-based Deep Autoencoder to detect station-keeping anomalies and potential cyber-kinetic threats in real-time.
 
-For a deep dive into the mathematics, detailed component breakdown, and ML architecture, please read the file titled "Orbitwatch Documentation"
+For a deep dive into the mathematics, detailed component breakdown, and ML architecture, please read the [Technical Documentation](TECHNICAL_DOCS.md).
 
 ---
 
@@ -12,13 +12,12 @@ OrbitWatch utilizes a modern, "Thick Client" stack to deliver high-performance p
 
 | Component | Technology | Purpose |
 | :--- | :--- | :--- |
-| **Frontend Core** | **React 19 (Vite)** | Component lifecycle, State management, HMR. |
+| **Frontend Core** | **React 18 (Vite)** | Component lifecycle, State management, HMR. |
 | **Machine Learning** | **TensorFlow.js** | Runs the Deep Autoencoder model on the GPU via WebGL. |
 | **Orbital Physics** | **Satellite.js** | SGP4/SDP4 propagation algorithms for real-time tracking. |
-| **Visualization** | **React-Map-GL** | High-performance Mapbox GL JS wrapper for 3D rendering. |
+| **Visualization** | **React-Globe.gl** | Three.js powered WebGL globe for 3D orbital rendering. |
 | **Styling** | **Tailwind CSS** | Utility-first styling for the mission-control aesthetic. |
 | **Data Source** | **Space-Track.org** | Real-world TLE (Two-Line Element) catalog data. |
-| **Cloud Integration**| **Anvil Uplink** | Secure bridge between local backend logic and cloud dashboards. |
 
 ---
 
@@ -37,6 +36,16 @@ The diagram below illustrates the complete component interaction model. Note how
 
 ---
 
+## Key Features
+
+1.  **3D Mission Control:** Interactive WebGL globe visualizing real-time orbital positions.
+2.  **ML Threat Analysis:** Deep Autoencoder model training on live data to detect anomalies.
+3.  **Threat Detections Grid:** Spreadsheet-style view for sorting and filtering active threat vectors.
+4.  **Debris Mitigation:** Real-time Conjunction Assessment (collision avoidance) based on Euclidean distance.
+5.  **Operational Timeline:** SGP4-based orbital history reconstruction with dynamic 24h/48h/7d windows.
+
+---
+
 ## Machine Learning Strategy
 
 Unlike rule-based systems, OrbitWatch uses **Unsupervised Learning**. We do not tell the model what an anomaly looks like; instead, we teach it what "normal" orbital physics look like, and it flags anything that breaks those laws.
@@ -44,7 +53,7 @@ Unlike rule-based systems, OrbitWatch uses **Unsupervised Learning**. We do not 
 **Key Strategies:**
 1.  **Deep Autoencoder:** We utilize a sequential neural network to learn the manifold of Keplerian physics.
 2.  **GEO-Centric Specialization (100 Satellites):** The model is trained on a live dataset of the top **100 Objects** in the Geostationary Belt.
-    * *Why 100?* For **Spatial Analysis** (Population-Based Anomaly Detection), a snapshot of 100 synchronized satellites is statistically sufficient to define the "Normal Manifold." If 99 satellites are stationary and 1 is drifting, the model detects the outlier without needing months of historical data. (See *Technical Docs Section 3.6* for full mathematical justification).
+    *   *Why 100?* For **Spatial Analysis** (Population-Based Anomaly Detection), a snapshot of 100 synchronized satellites is statistically sufficient to define the "Normal Manifold." If 99 satellites are stationary and 1 is drifting, the model detects the outlier without needing months of historical data. (See *Technical Docs Section 3.6* for full mathematical justification).
 3.  **Information Bottleneck:** A 3-neuron latent space forces the model to learn structural correlations rather than memorizing noise.
 
 ---
@@ -68,25 +77,24 @@ The diagram below details the ingestion lifecycle. It visualizes the path from U
 
 While OrbitWatch operates as a stateless client-side application by default (Architecture V1), a production-ready **PostgreSQL Schema** is provided for teams requiring historical data persistence and collaborative features.
 
-* **Schema Location:** `database/schema.sql`
-* **Architecture:** Designed for **Supabase (PostgreSQL)** to leverage built-in Real-Time subscriptions and Vector Search capabilities.
-* **Capabilities:** Enables long-term TLE storage for Temporal Analysis (Phase 3 LSTM models) and multi-user operator annotation sync.
-* **Documentation:** See **Section 8** of the [Technical Documentation](TECHNICAL_DOCS.md) for the complete schema design and integration strategy.
+*   **Schema Location:** `database/schema.sql`
+*   **Architecture:** Designed for **Supabase (PostgreSQL)** to leverage built-in Real-Time subscriptions and Vector Search capabilities.
+*   **Capabilities:** Enables long-term TLE storage for Temporal Analysis (Phase 3 LSTM models) and multi-user operator annotation sync.
+*   **Documentation:** See **Section 8** of the [Technical Documentation](TECHNICAL_DOCS.md) for the complete schema design and integration strategy.
 
 ---
 
 ## Setup & Installation Guide
 
 ### Prerequisites
-* **Node.js** (v18 or higher recommended)
-* **npm** or **yarn**
-* **Python 3.x** (For Anvil backend integration)
+*   **Node.js** (v18 or higher recommended)
+*   **npm** or **yarn**
 
-### Phase 1: Frontend Initialization
+### Step-by-Step Instructions
 
 1.  **Clone the Repository**
     ```bash
-    git clone [https://github.com/your-org/orbit-watch.git](https://github.com/your-org/orbit-watch.git)
+    git clone https://github.com/your-org/orbit-watch.git
     cd orbit-watch
     ```
 
@@ -106,77 +114,7 @@ While OrbitWatch operates as a stateless client-side application by default (Arc
     Open `http://localhost:5173` in your browser.
 
 5.  **Login**
-    * **Credentials:** Enter valid Space-Track.org credentials.
-    * **Mapbox:** The app will request a Mapbox Public Token for the 3D visualization layer.
-
-### Phase 2: Anvil Integration (Hybrid Cloud Dashboard)
-
-To expose your local OrbitWatch calculations to a public web dashboard without deploying a full server, we utilize **Anvil Uplink**. This creates a secure tunnel between your local Python backend and the Anvil cloud.
-
-#### 1. Create the Anvil App
-1.  Navigate to [anvil.works](https://anvil.works) and create a free account.
-2.  Click **New Blank App** and select **Material Design**.
-3.  In the editor sidebar, click the **App Browser** (folder icon) or the **+** button next to Services.
-4.  Add the **Uplink** service.
-5.  Click the **Enable Server Uplink** button.
-6.  **Copy the Uplink Key** shown on the screen (it starts with `server_...`).
-
-#### 2. Configure Your OrbitWatch Backend
-Open your terminal in the project root to configure the local environment.
-
-1.  **Install the Uplink Library:**
-    ```bash
-    pip install anvil-uplink
-    ```
-
-2.  **Set Your Uplink Key:**
-    Replace `server_YourKeyHere` with the key you copied in the previous step.
-
-    *Linux/Mac:*
-    ```bash
-    export ANVIL_UPLINK_KEY="server_YourKeyHere"
-    ```
-
-    *Windows (CMD):*
-    ```cmd
-    set ANVIL_UPLINK_KEY="server_YourKeyHere"
-    ```
-
-    *Windows (PowerShell):*
-    ```powershell
-    $env:ANVIL_UPLINK_KEY="server_YourKeyHere"
-    ```
-
-3.  **Start the Integration Service:**
-    ```bash
-    python3 backend/anvil_service.py
-    ```
-    *Wait until you see the success message: "Anvil Uplink Connected. Waiting for requests..."*
-
-#### 3. Build the UI (Anvil Editor)
-Return to the Anvil Editor in your browser to consume the local data.
-
-1.  Drag a **Repeating Panel** (or Data Grid) onto the visual designer (`Form1`).
-2.  Double-click the background to open the **Code** view (`Form1.py`).
-3.  Modify the `__init__` method to fetch data from your local machine:
-
-    ```python
-    import anvil.server
-    from ._anvil_designer import Form1Template
-
-    class Form1(Form1Template):
-      def __init__(self, **properties):
-        self.init_components(**properties)
-
-        # This calls the function running on YOUR local computer!
-        # "get_recent_tles" matches the function name in backend/anvil_service.py
-        data = anvil.server.call('get_recent_tles', limit=10)
-
-        # Assign data to your grid
-        self.repeating_panel_1.items = data
-    ```
-
-4.  Click the **Run** button in Anvil. You should immediately see data from your local OrbitWatch instance appear in the cloud web app.
+    *   **Credentials:** Enter valid Space-Track.org credentials.
 
 ---
 

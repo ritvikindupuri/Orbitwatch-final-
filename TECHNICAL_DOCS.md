@@ -1,0 +1,329 @@
+<h1 align="center">OrbitWatch: Technical Reference Manual</h1>
+<p align="center">
+  <b>By: Ritvik Indupuri</b><br>
+  <b>Date: 11/19/2025</b>
+</p>
+
+## 1. Executive Summary
+
+OrbitWatch represents a paradigm shift in Space Domain Awareness (SDA) architecture. Traditionally, orbital analysis and anomaly detection are computationally expensive tasks relegated to heavy backend clusters or cloud environments. This centralized approach introduces latency, bandwidth constraints, and potential single points of failure.
+
+**OrbitWatch proves that modern browser engines, equipped with WebGL and WebAssembly (Wasm), are capable of handling the rigorous mathematics of SGP4 propagation and Deep Learning inference entirely on the client side.**
+
+By shifting the compute load to the edge (the operator's machine), the platform achieves:
+1.  **Zero-Latency Inference:** Anomaly detection occurs instantly within the local memory space, removing network round-trips.
+2.  **Operational Security:** Sensitive orbital analysis logic runs locally within the browser sandbox; no raw telemetry needs to leave the secure terminal.
+3.  **Infrastructure Reduction:** The backend is effectively serverless, drastically reducing the cost and complexity of deployment.
+
+This document serves as a comprehensive engineering manual, detailing the specific implementation of the Client-Side Sandbox, the mathematical derivation of the Deep Autoencoder, and the React-based orchestration layer that binds the physics and AI engines together.
+
+## 2. System Architecture
+
+### High-Level Data Flow
+The application follows a linear state initialization followed by a cyclic analysis loop.
+
+1.  **Ingestion Phase:** User Login -> API Auth -> TLE Data Fetch -> Parsing.
+2.  **Training Phase:** Raw TLEs -> Vectorization -> Normalization -> Model Training (30 Epochs).
+3.  **Operational Phase:** 3D Globe Rendering <-> Real-time SGP4 Propagation <-> ML Inference Loop.
+
+### Tech Stack
+*   **Core Framework:** React 18 (Vite Build System)
+*   **Machine Learning:** TensorFlow.js (WebGL Backend)
+*   **Orbital Physics:** `satellite.js` (SGP4/SDP4 implementation)
+*   **Visualization:** `react-globe.gl` (Three.js WebGL)
+*   **Styling:** Tailwind CSS
+
+---
+
+## 3. Machine Learning Pipeline (`services/tensorFlowService.ts`)
+
+The core of the anomaly detection system is a **Deep Autoencoder**. An Autoencoder is a type of Neural Network trained to copy its input to its output. By restricting the network's capacity (creating a "bottleneck"), we force it to learn the most significant patterns in the data.
+
+### 3.1 Feature Engineering (The 6 Keplerian Elements)
+We do not train on arbitrary metadata like names or IDs. We extract the **6 Classical Orbital Elements (COEs)** directly from the Space-Track TLE data. These variables fundamentally define the shape, size, and orientation of an orbit in 3D space.
+
+The raw TLE string is parsed by the SGP4 library (`satellite.twoline2satrec`) to extract the following floating-point values, which form the input vector for the Neural Network:
+
+| Feature Index | SGP4 Variable | Description | Physical Significance |
+| :--- | :--- | :--- | :--- |
+| 0 | **`inclo`** (Inclination) | Orbit tilt relative to equator (Radians). | Distinguishes Polar/Sun-Synchronous orbits (high rads) from Equatorial orbits (low rads). |
+| 1 | **`ecco`** (Eccentricity) | Shape deviation from circle (0.0 to 1.0). | Critical for detecting maneuvers. A circular orbit becoming elliptical suggests a $\Delta V$ event. |
+| 2 | **`no`** (Mean Motion) | Revs/Day (Radians/Min). | **The Primary Differentiator.** Defines altitude. LEO satellites orbit fast (~15.0), GEO satellites orbit slow (~1.0). |
+| 3 | **`nodeo`** (RAAN) | Right Ascension of Ascending Node (Radians). | Defines the longitudinal orientation of the orbital plane. |
+| 4 | **`argpo`** (Arg of Perigee) | Argument of Perigee (Radians). | Defines the orientation of the ellipse within the orbital plane. |
+| 5 | **`mo`** (Mean Anomaly) | Position along orbit (Radians). | Defines where the satellite is *right now* along the path. |
+
+**Why these specific 6?**
+These parameters are mathematically sufficient to reconstruct any conic orbit. If the Autoencoder learns the correlations between these 6 numbers (e.g., specific Inclinations usually correlate with specific Mean Motions for Sun-Synchronous orbits), it effectively "understands" orbital mechanics.
+
+### 3.2 Data Normalization (Z-Score Standardization)
+Neural networks cannot handle raw orbital data effectively because the scales differ wildly (e.g., Eccentricity is 0.0001, while Mean Motion might be 15.0).
+Before training, we calculate the **Mean ($\mu$)** and **Standard Deviation ($\sigma$)** of the entire catalog. Every input vector $x$ is transformed:
+
+$$ x' = \frac{x - \mu}{\sigma} $$
+
+This ensures all inputs are centered around 0 with a variance of 1, allowing the Gradient Descent optimizer to converge significantly faster.
+
+### 3.3 Model Architecture
+
+<p align="center">
+  <img src="https://i.imgur.com/JjEf0lv.png" alt="Deep Autoencoder Architecture" width="400" />
+  <br>
+  <b>Figure 1: Deep Autoencoder Topology & Node Breakdown</b>
+</p>
+
+The model utilizes a symmetrical "hourglass" topology designed to compress orbital mechanics into a simplified manifold.
+
+**Node Breakdown:**
+
+1.  **Input Layer (6 Nodes):**
+    *   Receives the normalized Z-Scores of the 6 Keplerian elements.
+    *   Acts as the interface between the SGP4 physics engine and the Neural Network.
+
+2.  **Encoder Layer (12 Nodes - Activation: Tanh):**
+    *   **Function:** High-dimensional mapping.
+    *   **Math:** Uses the Hyperbolic Tangent (`tanh`) activation function to map inputs to a range of [-1, 1]. This layer looks for non-linear correlations between elements (e.g., how Inclination correlates with RAAN precession).
+
+3.  **Compression Layer (6 Nodes - Activation: ReLU):**
+    *   **Function:** Feature Reduction.
+    *   **Math:** Uses Rectified Linear Unit (`ReLU`) to zero out weak correlations and focus on strong signal pathways, beginning the compression process.
+
+4.  **Latent Space / Bottleneck (3 Nodes - Activation: ReLU):**
+    *   **Function:** The "Concept" Layer.
+    *   **Details:** This is the most critical layer. By forcing the 6 input features into 3 neurons, the model effectively learns a "Lossy Compression" of orbital mechanics. It cannot simply memorize the input; it must learn the *rules* of how orbits work to fit the data through this gate.
+
+5.  **Decompression Layer (6 Nodes - Activation: ReLU):**
+    *   **Function:** Reconstruction initialization.
+    *   **Math:** Expands the latent concepts back into feature space.
+
+6.  **Decoder Layer (12 Nodes - Activation: Tanh):**
+    *   **Function:** Fine-tuning.
+    *   **Math:** Mirrors the Encoder layer to smooth out the reconstruction before the final output.
+
+7.  **Output Layer (6 Nodes - Linear):**
+    *   **Function:** Final Reconstruction.
+    *   **Result:** Produces the "Predicted" orbit. Ideally, `Output ≈ Input`.
+
+### 3.4 Training Process
+*   **Optimizer:** Adam (Adaptive Moment Estimation) with learning rate 0.01.
+*   **Loss Function:** Mean Squared Error (MSE).
+*   **Epochs:** 30.
+*   **Execution:** Runs on the GPU via WebGL to prevent freezing the UI thread.
+
+### 3.5 Anomaly Scoring Logic
+The Risk Score is **not simulated**. It is a direct result of a mathematical operation performed by the TensorFlow engine in real-time. The calculation flow is as follows:
+
+1.  **Input:** We take the real physics data (Input Tensor $X$) derived from the SGP4 propagation.
+2.  **Processing:** The Neural Network passes these numbers through its layers, compressing them into 3 numbers (Latent Space) and then attempting to expand them back to 6.
+3.  **Calculation:** We execute `tf.losses.meanSquaredError(input, output)`.
+    *   This subtracts the **Output** (what the model thinks the orbit *should* look like based on its training) from the **Input** (what the orbit *actually* looks like).
+4.  **The Score (Reconstruction Error):**
+    *   If the satellite follows standard orbital mechanics, the error is tiny (e.g., 0.002).
+    *   If the satellite is anomalous (deviating from the learned physics manifold), the error is high (e.g., 0.5).
+5.  **Display:** We scale that raw error number to fit a 0-100 scale for the progress bar.
+    $$ Score = \min(100, MSE \times 500) $$
+
+### 3.6 Data Sufficiency & Training Strategy
+A critical architectural question is: **"Why is a snapshot of 100 satellites sufficient to detect anomalies?"**
+
+#### 1. The Strategy: GEO-Centric Specialization
+The model is specifically trained on the top **100 Objects** in the Geostationary Belt (filtered by `Mean Motion 0.99--1.01` and `Eccentricity < 0.01`).
+By narrowing the scope to this specific regime, we allow the Autoencoder to "over-fit" to the physics of perfectly stationary satellites. This makes it hyper-sensitive to minute deviations.
+
+#### 2. Spatial vs. Temporal Analysis (The "Platoon Analogy")
+There are two ways to detect an anomaly:
+*   **Temporal (Time-Based):** Watching one satellite for a week to see if it drifts. This requires a massive historical database.
+*   **Spatial (Population-Based):** Comparing one satellite against the "Standard Behavior" of its 99 peers *right now*.
+    *   *Analogy:* To tell if a soldier is marching out of step, you don't need to know where they walked yesterday. You just need to look at the rest of the platoon in that moment.
+    *   **Conclusion:** Our 100-satellite snapshot provides a statistically significant "Platoon" to define the baseline manifold. If 99 satellites are stationary and 1 is drifting, the Autoencoder (trained on the 99) will fail to reconstruct the 1, flagging it as an anomaly immediately. This allows for powerful detection without historical data overhead.
+
+#### 3. Prevention of Overfitting
+*   **Information Bottleneck:** The 3-neuron latent layer physically prevents the model from memorizing the noise of 100 satellites. It *must* learn the general rules to pass information through.
+*   **Epoch Limiting:** We strictly limit training to 30 Epochs. This stops the model before it can begin to memorize specific TLE floating-point idiosyncrasies.
+
+---
+
+## 4. Data Ingestion Strategy (`services/satelliteData.ts`)
+
+### 4.1 Space-Track API Integration
+The app attempts to connect to `https://www.space-track.org/ajaxauth/login`.
+*   **Method:** POST
+*   **Payload:** `identity` (username), `password`.
+*   **Query Logic (Live Mode):** We execute a specific query to `basicspacedata/query` strictly limited to **100 Satellites**.
+    *   *Filter:* `MEAN_MOTION` between 0.99 and 1.01 (Geosynchronous).
+    *   *Reasoning:* Training on this specific subset ensures the model learns the ideal "Station-Keeping" physics manifold.
+
+### 4.2 The CORS Fallback Mechanism
+**Problem:** Space-Track.org does not set `Access-Control-Allow-Origin` headers for localhost requests.
+**Solution:** The service catches the `Failed to fetch` error. If detected, it throws a visible error to the user interface rather than failing silently. Note: Previous versions included a fallback snapshot, but strictly enforcing API connectivity ensures data integrity.
+
+### 4.3 Data Accuracy & Freshness
+The application operates on strict, real-world orbital elements.
+*   **Live Mode:** Data is 100% accurate to the second, fetched directly from the Space-Track catalog.
+*   **Epoch Validity:** The SGP4 engine projects the satellite's position based on the TLE's Epoch. For stable GEO satellites, a TLE remains valid for days.
+
+---
+
+## 5. Orbital Physics Engine
+
+We utilize **SGP4 (Simplified General Perturbations 4)**, the NASA/NORAD standard for propagating satellite orbits. This mathematical model accounts for the Earth's oblateness (J2 perturbation), atmospheric drag, and lunar/solar gravity effects to predict a satellite's position/velocity from a TLE.
+
+### 5.1 Real-Time Historical Reconstruction (The "Moving Window" Strategy)
+One of the unique challenges of a client-side application is the lack of a persistent database storing weeks of historical telemetry. To visualize trends (like the Altitude and Velocity charts in `AnomalyDetailView.tsx`), we employ a technique called **Reverse-Time Propagation**.
+
+#### Construction Logic
+Instead of querying a database for past rows, we query the **Physics Engine**. When the view loads:
+1.  **Anchor Point:** We establish `t0 = Current System Time`.
+2.  **Iteration:** We execute a backward-looking loop that iterates **96 times** (representing the past 24 hours in 15-minute intervals).
+3.  **Propagation:** For each step $i$:
+    *   Calculate target time $t = t0 - (i \times 15 \text{ minutes})$.
+    *   Invoke `satellite.propagate(satrec, t)` to get the ECI (Earth-Centered Inertial) position vector ($x, y, z$) and velocity vector ($\dot{x}, \dot{y}, \dot{z}$).
+4.  **Transformation:** Convert ECI coordinates to **Geodetic** coordinates (Latitude, Longitude, Altitude) using Greenwich Mean Sidereal Time (GMST).
+5.  **Scalar Derivation:** Calculate scalar Velocity magnitude ($v = \sqrt{\dot{x}^2 + \dot{y}^2 + \dot{z}^2}$).
+
+#### Real-Time Update Mechanism
+To make the charts "Live" rather than static snapshots:
+*   **Trigger:** A React `useEffect` hook sets an interval timer (e.g., every 5 seconds).
+*   **State Mutation:** This timer updates a `now` state variable.
+*   **Re-Calculation:** This state change triggers a `useMemo` dependency invalidation. The entire 96-step physics loop runs again instantly (taking < 2ms on modern CPUs).
+*   **Visual Result:** The graph data array shifts forward. The oldest data point drops off, and a new "current" data point is added at the front. To the user, the graph appears to "crawl" forward in real-time, simulating a live data stream filling a buffer.
+
+<p align="center">
+  <img src="https://i.imgur.com/BhKMZ1R.png" alt="Orbital History Charts" width="600" />
+  <br>
+  <b>Figure 2: Real-Time Orbital History Charts generated by the SGP4 Moving Window algorithm.</b>
+</p>
+
+#### Accuracy & Limitations Note
+While extremely precise for visualization, this method is an **idealized projection**. It assumes the satellite has been in its *current* orbit (defined by the latest TLE) for the entire 24-hour window.
+*   **Accuracy:** Matches Keplerian physics perfectly.
+*   **Limitation:** It cannot depict unannounced maneuvers that occurred *within* the 24-hour window if those maneuvers are not yet reflected in the TLE epoch. It visualizes the *path* of the orbit, not a log of historical sensor detections.
+
+---
+
+## 6. Frontend Component Breakdown
+
+### 6.1 `App.tsx` (Orchestrator)
+The root component manages state routing between the primary views:
+*   **Dashboard:** The 3D Mission Control map.
+*   **Threat Detections:** A Data Grid view of active anomalies.
+*   **Debris Mitigation:** A Conjunction Assessment tool.
+
+### 6.2 `MapDisplay.tsx` (3D Visualization)
+*   **Engine:** `react-globe.gl` (Three.js WebGL).
+*   **Hybrid Rendering:**
+    *   **Standard Assets:** Rendered via `pointsData` layer.
+    *   **Anomalies:** Rendered as `ringsData` layer (Pulsating ripples).
+*   **User Interaction:** The `onPointClick` handler allows users to click directly on a satellite dot to select the anomaly, passing the ID up to the parent orchestrator.
+
+### 6.3 `ThreatsView.tsx` (Grid Analysis)
+A dedicated table view for active threat vectors.
+*   **Sorting:** Enables sorting by Risk Score, Timestamp, or Object Name.
+*   **Grouping:** Categorizes alerts by country of origin.
+*   **Action:** Click-to-analyze functionality jumps the user to the 3D view for that specific asset.
+
+### 6.4 `DebrisView.tsx` (Collision Avoidance)
+A real-time Conjunction Assessment module.
+*   **Math:** Calculates Euclidean distance between the selected satellite and every other object in the catalog at `t=now`.
+*   **Physics:** Uses SGP4 propagation to determine instantaneous positions.
+*   **Threshold:** Flags any object within 200km as a "Proximity Alert" relevant for GEO station-keeping.
+
+### 6.5 `AnomalyDetailView.tsx` (Deep Analysis)
+The deep-dive view containing extensive visualization modules:
+*   **Threat Classification Card:** Displays the **ML Risk Score** with an interactive tooltip explaining the MSE calculation. It also lists the specific **MITRE ATT&CK®** technique ID and **SPARTA** classification mapping.
+*   **Deviation Analysis:** A chart comparing the **Predicted Path** (Baseline SGP4) vs. **Actual Path** (Visualizing the deviation factor derived from the ML Risk Score).
+*   **Historical Notes:** A generated event log showing recent detected maneuvers or RF spikes.
+*   **Detailed Parameters:** A dense data grid showing raw SGP4 vectors (Inclination, RAAN, BSTAR).
+*   **RF Overview:** Maps the satellite owner to likely frequency bands (Ku, Ka, X, L) for spectrum awareness.
+*   **Operational Timeline:** Allows filtering the orbital history reconstruction by 24h, 48h, 7d, or 30d windows.
+
+<p align="center">
+  <img src="https://i.imgur.com/yEoVBHW.png" alt="App Interface Screenshot" width="600" />
+  <br>
+  <b>Figure 3: The Operator Interface (AnomalyDetailView) displaying a Critical ML Risk Score (99), the Pulse Visualization on the 3D Globe, and real-time telemetry vectors.</b>
+</p>
+
+---
+
+## 7. Operational Lifecycle Walkthrough
+
+This section traces the exact flow of data from user input to visual alert.
+
+1.  **Initialization:**
+    *   User enters credentials in `SpaceTrackLogin`.
+    *   `satelliteData.ts` fetches ~100 TLE records (GEO Focused).
+    *   **Result:** A `RealSatellite[]` array is stored in React State.
+
+2.  **Training (The "Loading" Screen):**
+    *   `App.tsx` triggers `trainModelOnCatalog`.
+    *   `tensorFlowService.ts` extracts 6 features from every satellite.
+    *   Stats (Mean/StdDev) are calculated.
+    *   The Autoencoder trains for 30 epochs on this specific data.
+    *   **Result:** A trained `tf.Sequential` model exists in browser memory.
+
+3.  **Steady State:**
+    *   User sees the 3D Globe (`MapDisplay`).
+    *   Every 60ms, WebGL updates the viewport.
+
+4.  **Anomaly Detection Event:**
+    *   Every 7 seconds, the `App.tsx` loop picks a random satellite.
+    *   It calls `model.predict(satellite)`.
+    *   The model calculates a Reconstruction Error (MSE).
+    *   **Result:** If MSE is high, a new `AnomalyAlert` is added to the state.
+
+5.  **User Response:**
+    *   The map renders a **Red Pulsating Ring** around the satellite.
+    *   User clicks the ring.
+    *   `AnomalyDetailView` opens, showing the ML Risk Score and Vectors.
+
+---
+
+## 8. Database Architecture (Supabase/PostgreSQL)
+
+While the current OrbitWatch implementation is stateless (Architecture V1), production deployments require persistence. The recommended database solution is **Supabase (PostgreSQL)** due to its native handling of Time-Series data and Real-Time subscriptions.
+
+### 8.1 Schema Design
+The data model is designed to support the transition from Spatial (Snapshot) analysis to Temporal (Historical) analysis.
+
+*   **`satellites` Table:**
+    *   Acts as the "Asset Inventory."
+    *   Stores NORAD ID, Name, Launch Date, and Owner.
+*   **`orbital_data` Table (Time-Series):**
+    *   **Purpose:** This is the most critical table for Phase 3 (LSTM).
+    *   **Function:** Instead of overwriting the TLE when it updates, we append a new row with a `timestamp`.
+    *   **ML Usage:** The LSTM model will query this table: `SELECT * FROM orbital_data WHERE satellite_id = 12345 ORDER BY epoch ASC`.
+*   **`anomalies` Table:**
+    *   Persists the ML Risk Scores generated by the Client-Side engine.
+    *   Enables historical reporting on threat trends.
+
+### 8.2 Session Management & Auth (NoSQL Capability via JSONB)
+We deliberately **avoid** using a separate MongoDB instance for session tracking to prevent "Polyglot Persistence" complexity. PostgreSQL provides a robust **JSONB** column type that allows document-style storage within a relational schema.
+
+*   **`user_profiles` Table:**
+    *   Stores user identity via Supabase Auth.
+    *   **`session_state` (JSONB):** Stores unstructured preferences such as active filters, last camera position (Lat/Lng/Alt), and UI theme settings.
+    *   *Advantage:* Keeps the entire stack unified (SQL) while providing the flexibility of a NoSQL document store for transient user data.
+
+---
+
+## 9. Conclusion & Future Roadmap
+
+OrbitWatch has successfully validated the efficacy of "Thick Client" architectures for mission-critical space operations. The implementation demonstrates that:
+1.  **Unsupervised Learning** is effective for detecting novel anomalies without labeled failure datasets.
+2.  **Client-Side Inference** via TensorFlow.js is performant enough for real-time analysis of thousands of objects.
+3.  **Cinema-Grade Visualization** can coexist with rigorous engineering tools in a web context.
+
+### Engineering Roadmap (Next Steps)
+To evolve from a Technical Proof-of-Concept (PoC) to a production-ready SpOC tool, the following milestones are proposed:
+
+*   **Phase 2: Rust & WebAssembly Migration**
+    *   *Objective:* Port the SGP4 propagation loop from JavaScript to Rust (compiled to Wasm).
+    *   *Benefit:* Increase particle simulation capacity from ~3,000 to 20,000+ objects at 60 FPS.
+
+*   **Phase 3: Temporal ML Models (LSTM)**
+    *   *Objective:* Replace the current dense Autoencoder with a Long Short-Term Memory (LSTM) Autoencoder.
+    *   *Benefit:* Allow the system to analyze time-series sequences of TLEs, enabling detection of gradual degradation trends (e.g., slowly failing thrusters) rather than just instantaneous state anomalies.
+
+*   **Phase 4: Federated Learning**
+    *   *Objective:* Implement a distributed training protocol.
+    *   *Benefit:* Allow individual operator nodes to train on local data and share weight updates without ever sharing the underlying classified orbital parameters or catalog data.

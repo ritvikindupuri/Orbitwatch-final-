@@ -9,13 +9,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1",
-    "recharts": "^3.1.2",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1",
+    "prop-types": "15.8.1",
+    "recharts": "2.12.0",
     "satellite.js": "^5.0.0",
     "@tensorflow/tfjs": "4.17.0",
-    "mapbox-gl": "3.1.2",
-    "react-map-gl": "7.1.7"
+    "three": "0.161.0",
+    "react-globe.gl": "2.27.2"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
-import Map, { Source, Layer, Marker, NavigationControl, MapRef } from 'react-map-gl';
+import Globe, { GlobeMethods } from 'react-globe.gl';
 import * as satellite from 'satellite.js';
 import { AnomalyAlert, RealSatellite } from '../types';
 import { getRiskHexColor, RiskLevel } from '../constants';
@@ -17,41 +17,39 @@ interface SatellitePoint {
   name: string;
   lat: number;
   lng: number;
-  alt: number; 
+  alt: number; // Normalized altitude for visibility
   color: string;
   isAlert: boolean;
   risk?: RiskLevel;
 }
 
-// Default to a dark map style if token is valid
-const MAP_STYLE = "mapbox://styles/mapbox/satellite-v9";
+interface AnomalyRing {
+  lat: number;
+  lng: number;
+  color: string;
+  maxRadius: number;
+  propagationSpeed: number;
+  repeatPeriod: number;
+  id: number;
+}
+
+interface OrbitalPath {
+    coords: [number, number, number][]; // [lat, lng, alt]
+    color: string;
+}
 
 export default function MapDisplay({ satelliteCatalog, alerts, selectedSatelliteId, onSelectSatellite }: MapDisplayProps) {
-    const mapRef = useRef<MapRef>(null);
-    const [mapboxToken, setMapboxToken] = useState<string>('');
-    const [isTokenSet, setIsTokenSet] = useState(false);
+    const globeEl = useRef<GlobeMethods | undefined>(undefined);
     const [satellites, setSatellites] = useState<SatellitePoint[]>([]);
-    const [viewState, setViewState] = useState({
-        longitude: -95,
-        latitude: 30,
-        zoom: 1.5,
-        bearing: 0,
-        pitch: 0
-    });
+    const [orbitalPath, setOrbitalPath] = useState<OrbitalPath[]>([]);
 
-    // 1. Handle API Key Submission
-    const handleTokenSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (mapboxToken.trim().length > 0) {
-            setIsTokenSet(true);
-        }
-    };
-
-    // 2. Propagate Orbits (Runs periodically)
+    // 1. Propagate Orbits (Runs periodically)
     useEffect(() => {
         const updatePositions = () => {
             const now = new Date();
-            const alertMap = new Map<number, AnomalyAlert>(alerts.map(a => [a.satellite.NORAD_CAT_ID, a]));
+            // Use native Map to avoid naming conflicts with component names if any
+            const alertMap = new Map<number, AnomalyAlert>();
+            alerts.forEach(a => alertMap.set(a.satellite.NORAD_CAT_ID, a));
             
             // Limit number of rendered sats for performance if catalog is massive
             const activeSats = satelliteCatalog.length > 4000 
@@ -71,7 +69,9 @@ export default function MapDisplay({ satelliteCatalog, alerts, selectedSatellite
 
                 const lat = satellite.degreesLat(positionGd.latitude);
                 const lng = satellite.degreesLong(positionGd.longitude);
-                const altKm = positionGd.height;
+                // Scale altitude for visibility (LEO is close to 0, GEO is higher)
+                // Earth Radius ~6371km. 
+                const alt = positionGd.height / 6371.0; 
 
                 const alert = alertMap.get(sat.NORAD_CAT_ID);
                 const isSelected = selectedSatelliteId === sat.NORAD_CAT_ID;
@@ -91,7 +91,7 @@ export default function MapDisplay({ satelliteCatalog, alerts, selectedSatellite
                     name: sat.OBJECT_NAME,
                     lat,
                     lng,
-                    alt: altKm,
+                    alt: Math.max(0.1, alt * 0.8), // Minimum altitude to appear above surface
                     color,
                     isAlert: !!alert,
                     risk: alert?.details?.riskLevel
@@ -106,176 +106,151 @@ export default function MapDisplay({ satelliteCatalog, alerts, selectedSatellite
         return () => clearInterval(interval);
     }, [satelliteCatalog, alerts, selectedSatelliteId]);
 
-    // 3. Automated Camera Movement
+    // 2. Prepare Data Layers
+    const { ringsData } = useMemo(() => {
+        const rings: AnomalyRing[] = satellites
+            .filter(s => s.isAlert)
+            .map(s => ({
+                id: s.id,
+                lat: s.lat,
+                lng: s.lng,
+                color: s.color,
+                maxRadius: 8, // Ripple effect radius
+                propagationSpeed: 2,
+                repeatPeriod: 800
+            }));
+        return { ringsData: rings };
+    }, [satellites]);
+
+    // 3. Calculate Projected Orbital Path for Selected Satellite
     useEffect(() => {
-        if (selectedSatelliteId && mapRef.current) {
-            const target = satellites.find(s => s.id === selectedSatelliteId);
-            if (target) {
-                mapRef.current.flyTo({
-                    center: [target.lng, target.lat],
-                    zoom: 4,
-                    speed: 1.2,
-                    curve: 1
-                });
+        if (!selectedSatelliteId) {
+            setOrbitalPath([]);
+            return;
+        }
+
+        const sat = satelliteCatalog.find(s => s.NORAD_CAT_ID === selectedSatelliteId);
+        if (!sat) return;
+
+        const satrec = satellite.twoline2satrec(sat.TLE_LINE1, sat.TLE_LINE2);
+        if (!satrec || satrec.error) return;
+
+        const now = new Date();
+        const coords: [number, number, number][] = [];
+
+        // Predict 24 hours into the future (1440 minutes)
+        // Step size: 5 minutes (288 points) for smooth visualization without heavy performance cost
+        for (let i = 0; i < 1440; i += 5) {
+            const t = new Date(now.getTime() + i * 60000); // i minutes in future
+            const positionAndVelocity = satellite.propagate(satrec, t);
+            
+            if ('position' in positionAndVelocity) {
+                 const positionEci = positionAndVelocity.position as satellite.EciVec3<number>;
+                 const gmst = satellite.gstime(t);
+                 const positionGd = satellite.eciToGeodetic(positionEci, gmst);
+                 
+                 const lat = satellite.degreesLat(positionGd.latitude);
+                 const lng = satellite.degreesLong(positionGd.longitude);
+                 // Normalize altitude consistent with pointsData (min altitude clamping not strictly needed for path, but good for consistency)
+                 const alt = positionGd.height / 6371.0; 
+                 // Slightly lift path to avoid z-fighting with earth surface if altitude is very low
+                 const safeAlt = Math.max(0.01, alt);
+
+                 coords.push([lat, lng, safeAlt]);
             }
         }
-    }, [selectedSatelliteId, satellites]); // Dependent on satellites updating to find target
 
-    // 4. Data Preparation for Mapbox Layers
-    const { geoJsonData, anomalyMarkers } = useMemo(() => {
-        // FeatureCollection for Standard Satellites (WebGL Layer)
-        const features = satellites.map(s => ({
-            type: 'Feature',
-            geometry: { type: 'Point', coordinates: [s.lng, s.lat] },
-            properties: {
-                id: s.id,
-                color: s.color,
-                radius: s.id === selectedSatelliteId ? 6 : 3,
-                isAlert: s.isAlert
+        // Determine path color based on alert status
+        const alert = alerts.find(a => a.satellite.NORAD_CAT_ID === selectedSatelliteId);
+        let pathColor = '#22d3ee'; // Default Cyan
+        if (alert?.details?.riskLevel) {
+            pathColor = getRiskHexColor(alert.details.riskLevel);
+        }
+
+        setOrbitalPath([{ coords, color: pathColor }]);
+
+    }, [selectedSatelliteId, satelliteCatalog, alerts]);
+
+
+    // 4. Camera Interaction
+    useEffect(() => {
+        if (selectedSatelliteId && globeEl.current) {
+            const target = satellites.find(s => s.id === selectedSatelliteId);
+            if (target) {
+                globeEl.current.pointOfView({ lat: target.lat, lng: target.lng, altitude: target.alt + 0.5 }, 1500);
             }
-        }));
+        }
+    }, [selectedSatelliteId, satellites]);
 
-        const geoJson = { type: 'FeatureCollection', features };
-
-        // Separate array for Anomalies (React Markers for Pulsing Effect)
-        const anomalies = satellites.filter(s => s.isAlert);
-
-        return { geoJsonData: geoJson, anomalyMarkers: anomalies };
-    }, [satellites, selectedSatelliteId]);
-
-    const handleLayerClick = useCallback((event: any) => {
-        const feature = event.features && event.features[0];
-        if (feature) {
-            onSelectSatellite(feature.properties.id);
+    const handlePointClick = useCallback((point: object) => {
+        const p = point as SatellitePoint;
+        if (p && p.id) {
+            onSelectSatellite(p.id);
         }
     }, [onSelectSatellite]);
 
-    // RENDER: Token Input Overlay
-    if (!isTokenSet) {
-        return (
-            <div className="relative w-full h-full bg-gray-950 flex flex-col items-center justify-center p-6">
-                <div className="w-full max-w-md bg-gray-900 border border-gray-700 rounded-xl p-8 shadow-2xl text-center">
-                    <div className="mb-4">
-                        <svg className="w-12 h-12 mx-auto text-cyan-500 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <h2 className="text-xl font-bold text-gray-100">Mapbox Authorization</h2>
-                        <p className="text-sm text-gray-400 mt-2">
-                            Enter your Mapbox Public Access Token to enable the high-definition 3D globe renderer.
-                        </p>
-                    </div>
-                    
-                    <form onSubmit={handleTokenSubmit} className="space-y-4">
-                        <input 
-                            type="text" 
-                            className="w-full p-3 bg-gray-950 border border-gray-700 rounded-md text-gray-200 text-sm focus:ring-2 focus:ring-cyan-500 outline-none"
-                            placeholder="pk.eyJ1..."
-                            value={mapboxToken}
-                            onChange={(e) => setMapboxToken(e.target.value)}
-                            required
-                        />
-                        <button 
-                            type="submit"
-                            className="w-full py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-md transition-colors"
-                        >
-                            Launch Visualization
-                        </button>
-                    </form>
-                    <p className="mt-4 text-xs text-gray-500">
-                        Don't have a token? <a href="https://account.mapbox.com/" target="_blank" rel="noreferrer" className="text-cyan-400 hover:underline">Get one free from Mapbox</a>.
-                    </p>
-                </div>
-            </div>
-        );
-    }
+    // This handles clicks on the rings (anomalies)
+    const handleRingClick = useCallback((ring: object) => {
+        // cast ring to expected type
+        const r = ring as AnomalyRing;
+        if (r && r.id) {
+            onSelectSatellite(r.id);
+        }
+    }, [onSelectSatellite]);
 
-    // RENDER: Map
+
     return (
         <div className="relative w-full h-full bg-gray-950">
-            <Map
-                ref={mapRef}
-                {...viewState}
-                onMove={evt => setViewState(evt.viewState)}
-                mapboxAccessToken={mapboxToken}
-                mapStyle={MAP_STYLE}
-                projection="globe"
-                fog={{
-                    "range": [0.5, 10],
-                    "color": "#030712", // gray-950
-                    "horizon-blend": 0.3,
-                    "high-color": "#082f49", // sky-950
-                    "space-color": "#030712",
-                    "star-intensity": 0.4
-                }}
-                terrain={{ source: 'mapbox-dem', exaggeration: 1.5 }}
-                onClick={(e) => onSelectSatellite(null)} // Deselect on background click
-                interactiveLayerIds={['satellites-layer']}
-                onMouseEnter={() => mapRef.current?.getCanvas().style.setProperty('cursor', 'pointer')}
-                onMouseLeave={() => mapRef.current?.getCanvas().style.removeProperty('cursor')}
-            >
-                {/* 1. Terrain Source for 3D Globe Depth */}
-                <Source
-                    id="mapbox-dem"
-                    type="raster-dem"
-                    url="mapbox://mapbox.mapbox-terrain-dem-v1"
-                    tileSize={512}
-                    maxzoom={14}
-                />
-
-                {/* 2. Standard Satellites Layer (WebGL) */}
-                <Source id="satellites-source" type="geojson" data={geoJsonData}>
-                    <Layer
-                        id="satellites-layer"
-                        type="circle"
-                        paint={{
-                            'circle-radius': ['get', 'radius'],
-                            'circle-color': ['get', 'color'],
-                            'circle-opacity': 0.8,
-                            'circle-stroke-width': 1,
-                            'circle-stroke-color': '#000000'
-                        }}
-                        onClick={handleLayerClick}
-                    />
-                </Source>
-
-                {/* 3. Anomalies (Pulsing Markers) */}
-                {anomalyMarkers.map(p => (
-                    <Marker
-                        key={p.id}
-                        longitude={p.lng}
-                        latitude={p.lat}
-                        anchor="center"
-                        onClick={(e) => {
-                            e.originalEvent.stopPropagation();
-                            onSelectSatellite(p.id);
-                        }}
-                    >
-                        <div className="relative group cursor-pointer">
-                            {/* Pulsing Ring - CSS Animation */}
-                            <div 
-                                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 rounded-full border-2 opacity-75 animate-ping"
-                                style={{ borderColor: p.color }}
-                            ></div>
-                            {/* Inner Dot */}
-                            <div 
-                                className="relative w-4 h-4 rounded-full border-2 border-white shadow-lg"
-                                style={{ backgroundColor: p.color }}
-                            ></div>
-                            
-                            {/* Tooltip on Hover */}
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max px-2 py-1 bg-gray-900 border border-gray-600 rounded text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
-                                {p.name}
-                                {p.risk && <span className="block font-bold text-[10px] uppercase" style={{ color: p.color }}>{p.risk} Risk</span>}
-                            </div>
-                        </div>
-                    </Marker>
-                ))}
+            <Globe
+                ref={globeEl}
+                globeImageUrl="//unpkg.com/three-globe/example/img/earth-night.jpg"
+                bumpImageUrl="//unpkg.com/three-globe/example/img/earth-topology.png"
+                backgroundImageUrl="//unpkg.com/three-globe/example/img/night-sky.png"
                 
-                <NavigationControl position="bottom-right" />
-            </Map>
-            
-            {/* Legend (Re-used) */}
-             <div className="absolute bottom-4 left-4 z-10 pointer-events-auto">
+                // Satellite Points
+                pointsData={satellites}
+                pointLat="lat"
+                pointLng="lng"
+                pointAltitude="alt"
+                pointColor="color"
+                pointRadius={(d: any) => d.id === selectedSatelliteId ? 1.5 : (d.isAlert ? 1.2 : 0.4)}
+                onPointClick={handlePointClick}
+                pointLabel={(d: any) => `
+                    <div style="background: rgba(17, 24, 39, 0.9); border: 1px solid #374151; padding: 4px 8px; border-radius: 4px; font-family: monospace;">
+                        <strong style="color: #e5e7eb">${d.name}</strong><br/>
+                        <span style="color: ${d.color}; font-size: 10px;">${d.risk || 'Nominal'}</span>
+                    </div>
+                `}
+
+                // Anomaly Ripples
+                ringsData={ringsData}
+                ringColor="color"
+                ringMaxRadius="maxRadius"
+                ringPropagationSpeed="propagationSpeed"
+                ringRepeatPeriod="repeatPeriod"
+                // @ts-ignore - onRingClick is valid in runtime but missing in some type definitions
+                onRingClick={handleRingClick}
+
+                // Orbital Paths (Predicted 24h)
+                pathsData={orbitalPath}
+                pathPoints="coords"
+                pathPointLat={(p: any) => p[0]}
+                pathPointLng={(p: any) => p[1]}
+                pathPointAlt={(p: any) => p[2]}
+                pathColor={(d: any) => d.color}
+                pathStroke={1.5}
+                pathDashLength={0.5}
+                pathDashGap={0.2}
+                pathDashAnimateTime={2000} // Speed of the flow animation
+                pathResolution={2} // Number of interpolation points
+
+                // Atmosphere
+                atmosphereColor="#3b82f6"
+                atmosphereAltitude={0.15}
+            />
+
+            {/* Legend Overlay */}
+            <div className="absolute bottom-4 left-4 z-10 pointer-events-auto">
                 <div className="bg-gray-900/80 backdrop-blur-sm p-3 rounded border border-gray-700 text-xs font-mono text-gray-400 shadow-2xl">
                     <p className="font-bold text-gray-200 mb-2">VISUALIZATION LEGEND</p>
                     <div className="space-y-2">
@@ -317,6 +292,15 @@ export default function MapDisplay({ satelliteCatalog, alerts, selectedSatellite
                              <div className="hidden group-hover:block absolute left-0 bottom-full mb-2 w-72 p-3 bg-gray-900 border border-gray-600 rounded-md shadow-2xl z-50">
                                 <p className="text-sky-400 font-bold mb-1">LOW VARIANCE</p>
                                 <p className="text-gray-300 leading-relaxed">Physics: Minor variance within standard margins (drag/solar pressure).</p>
+                            </div>
+                        </div>
+                         {/* Informational Tooltip */}
+                         <div className="group relative flex items-center gap-2 cursor-help">
+                            <span className="w-2 h-2 rounded-full bg-gray-500"></span> 
+                            <span className="text-gray-400 font-semibold">Informational</span>
+                             <div className="hidden group-hover:block absolute left-0 bottom-full mb-2 w-72 p-3 bg-gray-900 border border-gray-600 rounded-md shadow-2xl z-50">
+                                <p className="text-gray-400 font-bold mb-1">NOMINAL BEHAVIOR</p>
+                                <p className="text-gray-300 leading-relaxed">Physics: Reconstruction Error (MSE) is negligible (&lt;0.005). Adheres perfectly to learned physics.</p>
                             </div>
                         </div>
                     </div>

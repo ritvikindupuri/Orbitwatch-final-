@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import Globe, { GlobeMethods } from 'react-globe.gl';
 import * as satellite from 'satellite.js';
@@ -33,15 +32,9 @@ interface AnomalyRing {
   id: number;
 }
 
-interface OrbitalPath {
-    coords: [number, number, number][]; // [lat, lng, alt]
-    color: string;
-}
-
 export default function MapDisplay({ satelliteCatalog, alerts, selectedSatelliteId, onSelectSatellite }: MapDisplayProps) {
     const globeEl = useRef<GlobeMethods | undefined>(undefined);
     const [satellites, setSatellites] = useState<SatellitePoint[]>([]);
-    const [orbitalPath, setOrbitalPath] = useState<OrbitalPath[]>([]);
 
     // 1. Propagate Orbits (Runs periodically)
     useEffect(() => {
@@ -122,57 +115,7 @@ export default function MapDisplay({ satelliteCatalog, alerts, selectedSatellite
         return { ringsData: rings };
     }, [satellites]);
 
-    // 3. Calculate Projected Orbital Path for Selected Satellite
-    useEffect(() => {
-        if (!selectedSatelliteId) {
-            setOrbitalPath([]);
-            return;
-        }
-
-        const sat = satelliteCatalog.find(s => s.NORAD_CAT_ID === selectedSatelliteId);
-        if (!sat) return;
-
-        const satrec = satellite.twoline2satrec(sat.TLE_LINE1, sat.TLE_LINE2);
-        if (!satrec || satrec.error) return;
-
-        const now = new Date();
-        const coords: [number, number, number][] = [];
-
-        // Predict 24 hours into the future (1440 minutes)
-        // Step size: 5 minutes (288 points) for smooth visualization without heavy performance cost
-        for (let i = 0; i < 1440; i += 5) {
-            const t = new Date(now.getTime() + i * 60000); // i minutes in future
-            const positionAndVelocity = satellite.propagate(satrec, t);
-            
-            if ('position' in positionAndVelocity) {
-                 const positionEci = positionAndVelocity.position as satellite.EciVec3<number>;
-                 const gmst = satellite.gstime(t);
-                 const positionGd = satellite.eciToGeodetic(positionEci, gmst);
-                 
-                 const lat = satellite.degreesLat(positionGd.latitude);
-                 const lng = satellite.degreesLong(positionGd.longitude);
-                 // Normalize altitude consistent with pointsData (min altitude clamping not strictly needed for path, but good for consistency)
-                 const alt = positionGd.height / 6371.0; 
-                 // Slightly lift path to avoid z-fighting with earth surface if altitude is very low
-                 const safeAlt = Math.max(0.01, alt);
-
-                 coords.push([lat, lng, safeAlt]);
-            }
-        }
-
-        // Determine path color based on alert status
-        const alert = alerts.find(a => a.satellite.NORAD_CAT_ID === selectedSatelliteId);
-        let pathColor = '#22d3ee'; // Default Cyan
-        if (alert?.details?.riskLevel) {
-            pathColor = getRiskHexColor(alert.details.riskLevel);
-        }
-
-        setOrbitalPath([{ coords, color: pathColor }]);
-
-    }, [selectedSatelliteId, satelliteCatalog, alerts]);
-
-
-    // 4. Camera Interaction
+    // 3. Camera Interaction
     useEffect(() => {
         if (selectedSatelliteId && globeEl.current) {
             const target = satellites.find(s => s.id === selectedSatelliteId);
@@ -230,19 +173,6 @@ export default function MapDisplay({ satelliteCatalog, alerts, selectedSatellite
                 ringRepeatPeriod="repeatPeriod"
                 // @ts-ignore - onRingClick is valid in runtime but missing in some type definitions
                 onRingClick={handleRingClick}
-
-                // Orbital Paths (Predicted 24h)
-                pathsData={orbitalPath}
-                pathPoints="coords"
-                pathPointLat={(p: any) => p[0]}
-                pathPointLng={(p: any) => p[1]}
-                pathPointAlt={(p: any) => p[2]}
-                pathColor={(d: any) => d.color}
-                pathStroke={1.5}
-                pathDashLength={0.5}
-                pathDashGap={0.2}
-                pathDashAnimateTime={2000} // Speed of the flow animation
-                pathResolution={2} // Number of interpolation points
 
                 // Atmosphere
                 atmosphereColor="#3b82f6"

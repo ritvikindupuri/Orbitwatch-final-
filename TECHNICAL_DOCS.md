@@ -1,3 +1,4 @@
+
 <h1 align="center">OrbitWatch: Technical Reference Manual</h1>
 <p align="center">
   <b>By: Ritvik Indupuri</b><br>
@@ -203,11 +204,10 @@ While extremely precise for visualization, this method is an **idealized project
 
 ## 6. Frontend Component Breakdown
 
-### 6.1 `App.tsx` (Orchestrator)
-The root component manages state routing between the primary views:
-*   **Dashboard:** The 3D Mission Control map.
-*   **Threat Detections:** A Data Grid view of active anomalies.
-*   **Debris Mitigation:** A Conjunction Assessment tool.
+### 6.1 `App.tsx`
+The root orchestrator.
+*   **State:** `satelliteCatalog` (Data), `alerts` (Active Anomalies), `isAuthenticated` (View Switching).
+*   **Analysis Loop:** A `useEffect` hook runs every 7 seconds. It selects a random satellite from the catalog and passes it to `generateAnomalyAnalysis()`.
 
 ### 6.2 `MapDisplay.tsx` (3D Visualization)
 *   **Engine:** `react-globe.gl` (Three.js WebGL).
@@ -216,26 +216,15 @@ The root component manages state routing between the primary views:
     *   **Anomalies:** Rendered as `ringsData` layer (Pulsating ripples).
 *   **User Interaction:** The `onPointClick` handler allows users to click directly on a satellite dot to select the anomaly, passing the ID up to the parent orchestrator.
 
-### 6.3 `ThreatsView.tsx` (Grid Analysis)
-A dedicated table view for active threat vectors.
-*   **Sorting:** Enables sorting by Risk Score, Timestamp, or Object Name.
-*   **Grouping:** Categorizes alerts by country of origin.
-*   **Action:** Click-to-analyze functionality jumps the user to the 3D view for that specific asset.
+### 6.3 `DashboardPanel.tsx` (Control Interface)
+*   **Debounced Filtering:** The search input utilizes a **300ms debounce**. This ensures that the filtering logic (which matches against Name, NORAD ID, Risk Level, Country, and Type) only runs once the user stops typing, preventing UI lag during rapid input.
+*   **Risk Distribution:** Uses `recharts` to render a dynamic bar chart summarizing the threat landscape.
 
-### 6.4 `DebrisView.tsx` (Collision Avoidance)
-A real-time Conjunction Assessment module.
-*   **Math:** Calculates Euclidean distance between the selected satellite and every other object in the catalog at `t=now`.
-*   **Physics:** Uses SGP4 propagation to determine instantaneous positions.
-*   **Threshold:** Flags any object within 200km as a "Proximity Alert" relevant for GEO station-keeping.
-
-### 6.5 `AnomalyDetailView.tsx` (Deep Analysis)
-The deep-dive view containing extensive visualization modules:
+### 6.4 `AnomalyDetailView.tsx` (Deep Analysis)
+The deep-dive view containing:
 *   **Threat Classification Card:** Displays the **ML Risk Score** with an interactive tooltip explaining the MSE calculation. It also lists the specific **MITRE ATT&CK®** technique ID and **SPARTA** classification mapping.
-*   **Deviation Analysis:** A chart comparing the **Predicted Path** (Baseline SGP4) vs. **Actual Path** (Visualizing the deviation factor derived from the ML Risk Score).
-*   **Historical Notes:** A generated event log showing recent detected maneuvers or RF spikes.
-*   **Detailed Parameters:** A dense data grid showing raw SGP4 vectors (Inclination, RAAN, BSTAR).
-*   **RF Overview:** Maps the satellite owner to likely frequency bands (Ku, Ka, X, L) for spectrum awareness.
-*   **Operational Timeline:** Allows filtering the orbital history reconstruction by 24h, 48h, 7d, or 30d windows.
+*   **Live Vectors:** Runs its own 1-second interval SGP4 loop to show the "odometer" style changing numbers for Altitude/Velocity.
+*   **Charts:** Area charts for Altitude and Velocity history, sized to fit without scrolling cutoff.
 
 <p align="center">
   <img src="https://i.imgur.com/yEoVBHW.png" alt="App Interface Screenshot" width="600" />

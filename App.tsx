@@ -1,11 +1,10 @@
+
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { AnomalyAlert, RealSatellite, AnomalyDetails } from './types';
-import { Sidebar } from './components/Sidebar';
+import { Header } from './components/Header';
 import { GlobalStatsBar } from './components/GlobalStatsBar';
 import { DashboardPanel } from './components/DashboardPanel';
 import MapDisplay from './components/MapDisplay';
-import { ThreatsView } from './components/ThreatsView';
-import { DebrisView } from './components/DebrisView';
 import { ArchiveModal } from './components/ArchiveModal';
 import { fetchSpaceTrackCatalog } from './services/satelliteData';
 import { generateAnomalyAnalysis, trainModelOnCatalog } from './services/tensorFlowService';
@@ -14,9 +13,6 @@ import { SpaceTrackLogin } from './components/SpaceTrackLogin';
 const MAX_ALERTS = 100;
 
 export const App: React.FC = () => {
-  // View State
-  const [currentView, setCurrentView] = useState<'dashboard' | 'threats' | 'debris' | 'settings'>('dashboard');
-
   // Login State
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
@@ -72,12 +68,6 @@ export const App: React.FC = () => {
               setLoginError("An unknown error occurred connecting to Space-Track.");
           }
       }
-  };
-
-  const handleClearSession = () => {
-      // In a real app, we might clear local storage here.
-      // Since we use in-memory state, reload acts as a full reset.
-      window.location.reload();
   };
 
   // Core analysis logic
@@ -210,79 +200,38 @@ export const App: React.FC = () => {
       );
   }
 
-  // 3. Render Main App Layout (Sidebar + Content)
+  // 3. Render Main App
   return (
-    <div className="flex h-screen bg-gray-950 overflow-hidden text-gray-100 font-sans">
-      {/* LEFT SIDEBAR NAVIGATION */}
-      <Sidebar 
-          activeView={currentView} 
-          onNavigate={setCurrentView} 
-          onClearSession={handleClearSession}
-          isDemoMode={false}
+    <div className="flex flex-col h-screen bg-gray-950 overflow-hidden text-gray-100 font-sans">
+      <Header 
+        onClearSession={() => window.location.reload()}
+        isDemoMode={false}
       />
+      
+      <GlobalStatsBar alerts={alerts} satelliteCount={satelliteCatalog.length} />
 
-      {/* MAIN CONTENT AREA */}
-      <div className="flex-1 flex flex-col relative overflow-hidden">
-          
-          <GlobalStatsBar alerts={alerts} satelliteCount={satelliteCatalog.length} />
-
-          {currentView === 'dashboard' && (
-            <div className="flex-1 relative flex overflow-hidden">
-                {/* 3D MAP LAYER */}
-                <div className="flex-1 relative z-0">
-                    <MapDisplay 
-                        satelliteCatalog={satelliteCatalog}
-                        alerts={alerts}
-                        selectedSatelliteId={selectedSatelliteId}
-                        onSelectSatellite={setSelectedSatelliteId}
-                    />
-                </div>
-                
-                {/* RIGHT DASHBOARD PANEL (Overlays Map) */}
-                <div className="relative z-10 h-full">
-                    <DashboardPanel 
-                        alerts={alerts}
-                        selectedSatelliteId={selectedSatelliteId}
-                        onSelectSatellite={setSelectedSatelliteId}
-                        onArchiveAlert={handleArchiveAlert}
-                        onOpenArchive={() => setIsArchiveOpen(true)}
-                        onSaveNotes={handleSaveNotes}
-                        filterOptions={filterOptions}
-                        isSystemReady={isAuthenticated}
-                    />
-                </div>
-            </div>
-          )}
-
-          {currentView === 'threats' && (
-              <ThreatsView 
-                  alerts={alerts} 
-                  onSelectSatellite={(id) => {
-                      setSelectedSatelliteId(id);
-                      setCurrentView('dashboard'); // Jump to map on select
-                  }}
-              />
-          )}
-
-          {currentView === 'debris' && (
-              <DebrisView 
-                  catalog={satelliteCatalog} 
-                  selectedSatId={selectedSatelliteId} 
-              />
-          )}
-          
-          {currentView === 'settings' && (
-               <div className="flex-1 p-10 flex flex-col items-center justify-center text-gray-500">
-                    <svg className="w-16 h-16 mb-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                   <h2 className="text-2xl font-bold">System Configuration</h2>
-                   <p>API Endpoint: Space-Track.org (Direct)</p>
-                   <p>ML Engine: TensorFlow.js (WebGL)</p>
-               </div>
-          )}
-
+      <div className="flex-1 relative flex overflow-hidden">
+        <div className="flex-1 relative z-0">
+            <MapDisplay 
+                satelliteCatalog={satelliteCatalog}
+                alerts={alerts}
+                selectedSatelliteId={selectedSatelliteId}
+                onSelectSatellite={setSelectedSatelliteId}
+            />
+        </div>
+        
+        <div className="relative z-10">
+            <DashboardPanel 
+                alerts={alerts}
+                selectedSatelliteId={selectedSatelliteId}
+                onSelectSatellite={setSelectedSatelliteId}
+                onArchiveAlert={handleArchiveAlert}
+                onOpenArchive={() => setIsArchiveOpen(true)}
+                onSaveNotes={handleSaveNotes}
+                filterOptions={filterOptions}
+                isSystemReady={isAuthenticated}
+            />
+        </div>
       </div>
 
       <ArchiveModal 

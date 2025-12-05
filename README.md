@@ -1,3 +1,4 @@
+
 # OrbitWatch: AI-Powered Space Domain Awareness (SDA) Platform
 
 **OrbitWatch** is a cutting-edge, client-side application designed to simulate the capabilities of a Space Operations Center (SpOC). It ingests real orbital telemetry (TLE data), visualizes assets on an interactive 3D globe, and employs a browser-based Deep Autoencoder to detect station-keeping anomalies and potential cyber-kinetic threats in real-time.
@@ -33,16 +34,6 @@ The diagram below illustrates the complete component interaction model. Note how
   <br>
   <b>Figure 1: High-Level System Architecture & Client-Side Sandbox Boundary</b>
 </p>
-
----
-
-## Key Features
-
-1.  **3D Mission Control:** Interactive WebGL globe visualizing real-time orbital positions.
-2.  **ML Threat Analysis:** Deep Autoencoder model training on live data to detect anomalies.
-3.  **Threat Detections Grid:** Spreadsheet-style view for sorting and filtering active threat vectors.
-4.  **Debris Mitigation:** Real-time Conjunction Assessment (collision avoidance) based on Euclidean distance.
-5.  **Operational Timeline:** SGP4-based orbital history reconstruction with dynamic 24h/48h/7d windows.
 
 ---
 
